@@ -19,7 +19,12 @@
  * the whole tile is the target (Fitts's).
  */
 
-import { TYPE_LABEL, presentTile, type EnvelopeTileModel } from '../lib/envelope-math';
+import {
+  TYPE_LABEL,
+  presentTile,
+  showsTypeChip,
+  type EnvelopeTileModel,
+} from '../lib/envelope-math';
 
 export * from '../lib/envelope-math';
 
@@ -49,11 +54,14 @@ export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {
   name.className = 'tile-name';
   name.textContent = envelope.name;
 
-  const kind = document.createElement('span');
-  kind.className = 'tile-kind';
-  kind.textContent = TYPE_LABEL[envelope.type];
+  head.append(name);
 
-  head.append(name, kind);
+  if (showsTypeChip(envelope)) {
+    const kind = document.createElement('span');
+    kind.className = 'tile-kind';
+    kind.textContent = TYPE_LABEL[envelope.type];
+    head.append(kind);
+  }
 
   const amount = document.createElement('div');
   amount.className = 'tile-amount money';

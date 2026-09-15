@@ -88,6 +88,17 @@ export function fundedFraction(
  * are too important to leave that way.
  * ---------------------------------------------------------------------- */
 
+/**
+ * Whether the small uppercase type chip is worth showing.
+ *
+ * "Unallocated / UNALLOCATED" printed the same word twice across one narrow
+ * tile and pushed the NAME into an ellipsis — "Unall…" — so the redundant
+ * label survived and the real one was the casualty.
+ */
+export function showsTypeChip(envelope: EnvelopeTileModel): boolean {
+  return envelope.name.trim().toLowerCase() !== TYPE_LABEL[envelope.type].toLowerCase();
+}
+
 export interface TilePresentation {
   /** The big number. */
   amountText: string;

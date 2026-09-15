@@ -118,8 +118,15 @@
   );
 }
 
+/* The Available zone holds exactly one tile — unallocated — and it is the one
+ * the whole screen is about: the money with no job, and the source of every
+ * fund action. At half width it sat alone in a two-column row with a hole
+ * beside it, reading like a leftover rather than the headline. */
+.zone[data-zone='available'] .zone-grid { grid-template-columns: 1fr; }
+
 @media (min-width: 860px) {
   .zone-grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
+  .zone[data-zone='available'] .zone-grid { grid-template-columns: 1fr; }
 }
 
 /* --- Fund sheet (tap-to-fund) -------------------------------------------- */

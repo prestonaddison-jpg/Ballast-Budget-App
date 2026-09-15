@@ -198,10 +198,12 @@ function renderShell(me: MeResponse, money: EnvelopesResponse | null) {
   // WHOSE money. Entities never commingle (§3), so an unlabelled hero over a
   // card listing three LLCs invites the one misreading the whole structure
   // exists to prevent: reading a single entity's figure as a group total.
+  // Its own quiet line rather than appended to the label: "SAFE TO SPEND ·
+  // CONCIERGE CAR REPAIR DFW" wrapped onto two lines at iPhone width and shoved
+  // the figure down the screen.
   const heroEntity = me.entities.find((e) => e.id === money?.entityId) ?? me.entities[0];
-  hero.append(
-    h('div', 'safe-label', heroEntity ? `Safe to spend · ${heroEntity.name}` : 'Safe to spend'),
-  );
+  if (heroEntity) hero.append(h('div', 'safe-entity', heroEntity.name));
+  hero.append(h('div', 'safe-label', 'Safe to spend'));
 
   const figure = h('div', 'safe-figure');
   const sub = h('div', 'safe-sub');

@@ -87,6 +87,12 @@ h1, h2, h3 { font-family: var(--display), system-ui, sans-serif; margin: 0; lett
   background: linear-gradient(180deg, transparent, var(--bgfade));
   pointer-events: none;
 }
+.hero .safe-entity {
+  font-size: .78rem; font-weight: 600; letter-spacing: .01em;
+  color: rgba(244, 246, 250, .58);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-bottom: 1px;
+}
 .hero .safe-label {
   font-size: .75rem; letter-spacing: .08em; text-transform: uppercase;
   color: rgba(244, 246, 250, .72); font-weight: 600;
