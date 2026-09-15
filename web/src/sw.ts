@@ -40,10 +40,17 @@ self.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
     (async () => {
       const cache = await caches.open(SHELL_CACHE);
-      // Individual failures must not abort the whole install.
-      await Promise.allSettled(
+      // One failed asset must not abort the whole install, but it must not
+      // pass unnoticed either: `activate` deletes every older cache, so a
+      // silently incomplete precache leaves a permanently broken offline
+      // shell with no way to notice it happened.
+      const results = await Promise.allSettled(
         SHELL_ASSETS.map((url) => cache.add(new Request(url, { cache: 'reload' }))),
       );
+      const failed = SHELL_ASSETS.filter((_, i) => results[i].status === 'rejected');
+      if (failed.length) {
+        console.warn('[ballast sw] shell assets failed to precache', failed);
+      }
       await self.skipWaiting();
     })(),
   );
@@ -98,12 +105,20 @@ self.addEventListener('fetch', (event: FetchEvent) => {
     (async () => {
       const cached = await caches.match(request, { cacheName: SHELL_CACHE });
       if (cached) return cached;
-      const response = await fetch(request);
-      if (response.ok && response.type === 'basic') {
-        const cache = await caches.open(SHELL_CACHE);
-        cache.put(request, response.clone());
+      try {
+        const response = await fetch(request);
+        if (response.ok && response.type === 'basic') {
+          const cache = await caches.open(SHELL_CACHE);
+          cache.put(request, response.clone());
+        }
+        return response;
+      } catch {
+        // Offline with a cache miss — an asset that failed to precache, or one
+        // added after this worker installed. Without this catch the fetch
+        // handler rejects and the browser shows its own network error page
+        // instead of the app shell's offline state.
+        return new Response('', { status: 504, statusText: 'Offline' });
       }
-      return response;
     })(),
   );
 });

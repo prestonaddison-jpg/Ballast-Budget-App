@@ -23,7 +23,7 @@ concretely, what was deliberately left out, and what the spikes found.
 | Plaid sandbox spike | `spikes/plaid-sandbox/` | exercises the lifecycle and **asserts the boundary's assumptions** |
 | Real-bank coverage spike | `spikes/bank-coverage/` | automated metadata pass + manual protocol (see §4) |
 
-Verification: `npm run typecheck` (3 projects), `npm test` (88 tests, including
+Verification: `npm run typecheck` (3 projects), `npm test` (130 tests, including
 Worker tests against a real D1 in Miniflare), `npm run build`.
 
 ## 2. What is deliberately NOT built
@@ -181,6 +181,45 @@ These were settled during Phase 0 and constrain what comes next.
    `hashPassword()`.
 5. **Request the Recurring Transactions add-on** from Plaid (see §4 above).
 6. **Run both spikes** and record the results.
+
+## 6a. Adversarial review
+
+Phase 0 was reviewed by five independent reviewers (auth/session, cryptography,
+ledger correctness, Workers platform, PWA front end), and every finding was then
+handed to a separate agent whose job was to **refute** it against the real code.
+Roughly two thirds did not survive that step.
+
+What the surviving findings changed, in rough order of how badly they would
+have hurt:
+
+- **Webhook replay suppression was keyed on the raw body digest.** A Plaid
+  `SYNC_UPDATES_AVAILABLE` body carries no nonce and no timestamp, so two
+  genuinely different sync events for the same Item are byte-identical. The
+  unique index would have swallowed every sync notification after the first,
+  permanently — Ballast would have stopped seeing new deposits while looking
+  completely healthy. The key is now the signed delivery token.
+- **A failed webhook could never be retried.** The intake row was written
+  before the work and left in place on failure, so the 500 that asks Plaid to
+  retry was answered by a retry the dedup index rejected.
+- **The PWA document had no security headers at all.** The assets binding
+  returns files unmodified, so `index.html` — the only response where CSP and
+  `frame-ancestors` do anything — shipped bare.
+- **Rate limiting did not limit under concurrency.** KV read-modify-write meant
+  a parallel burst all read the same value and all passed. Now an atomic D1
+  statement, with a test that fires 20 concurrent requests at a limit of 3.
+- **The session cookie never slid**, so an actively-used session was dropped by
+  the browser 14 days after login regardless of use.
+- **Every focal alert rendered red**, because `data-tone` was written but no CSS
+  read it — a "connect an account" prompt was styled as a failure, which is
+  exactly the shame UI §14 forbids.
+- **The theme was applied after first paint**, so dark-pole users got a white
+  flash on every launch and the iOS chrome stayed tinted for the wrong pole.
+
+Two findings were real but **latent**: `drainSync`/`planReconcile` and
+`createLinkSession` have no callers until Slice 1 and Slice 6 respectively, so
+neither could misbehave today. Both were fixed anyway, because they are exactly
+the kind of defect that is invisible until the code that depends on them is
+written.
 
 ## 7. Open items from the blueprint
 

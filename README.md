@@ -30,7 +30,7 @@ Verify everything:
 
 ```bash
 npm run typecheck                # Worker, web, and test projects
-npm test                         # 88 tests, incl. real-D1 Worker tests
+npm test                         # 130 tests, incl. real-D1 Worker tests
 npm run build
 ```
 

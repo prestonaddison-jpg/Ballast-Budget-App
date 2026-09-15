@@ -125,9 +125,18 @@ export interface RecurringStream {
   sourceAccountId: string;
   description: string;
   merchantName: string | null;
-  /** Normalized: positive = money in. An obligation is therefore negative. */
-  lastAmountMinor: Minor;
-  averageAmountMinor: Minor;
+  /**
+   * Normalized: positive = money in, so an obligation is negative.
+   *
+   * NULL means the provider did not report an amount — which is NOT the same
+   * as zero. Plaid's TransactionStreamAmount.amount is optional, and coercing
+   * an absent amount to 0 would present a real, confident "$0 obligation" to
+   * the forward-obligations engine: it would be funded at zero, netted out of
+   * "safe to spend" at zero, and would silently under-reserve for a bill that
+   * actually has a value. Consumers must handle null explicitly.
+   */
+  lastAmountMinor: Minor | null;
+  averageAmountMinor: Minor | null;
   currency: string;
   cadence: StreamCadence;
   maturity: StreamMaturity;
@@ -212,8 +221,17 @@ export interface LedgerSource {
   /** Begin a new connection, or re-auth an existing one (update mode). */
   createLinkSession(input: {
     userId: string;
-    /** Present for re-auth: repairs this item instead of adding a new one. */
-    reauthItemId?: string;
+    /**
+     * Present for RE-AUTH (provider "update mode"): repairs the existing
+     * connection instead of creating a second one.
+     *
+     * This is the decrypted provider credential, not Ballast's item id,
+     * because the boundary must not reach into the database — the caller owns
+     * decryption. Passing Ballast's own id here would silently produce a
+     * fresh link and leave the operator with a DUPLICATE connection to the
+     * same bank.
+     */
+    reauthAccessToken?: string;
     webhookUrl: string;
     redirectUri?: string;
     /** History to request on first link — up to ~24 months, bank-dependent. */

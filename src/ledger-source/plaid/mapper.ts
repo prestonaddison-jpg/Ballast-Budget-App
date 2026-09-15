@@ -202,6 +202,10 @@ const MATURITY: Record<PlaidStreamStatus, StreamMaturity> = {
   TOMBSTONED: 'tombstoned',
 };
 
+function streamAmount(amount: PlaidTransactionStreamAmount): Minor | null {
+  return amount.amount == null ? null : normalizeAmount(amount.amount);
+}
+
 function streamCurrency(amount: PlaidTransactionStreamAmount): string | null {
   return amount.iso_currency_code ?? amount.unofficial_currency_code ?? null;
 }
@@ -213,9 +217,12 @@ export function mapStream(stream: PlaidTransactionStream): RecurringStream {
     description: stream.description,
     merchantName: stream.merchant_name,
     // Same sign flip as transactions: an obligation stream is money OUT, so it
-    // normalizes negative.
-    lastAmountMinor: normalizeAmount(stream.last_amount.amount ?? 0),
-    averageAmountMinor: normalizeAmount(stream.average_amount.amount ?? 0),
+    // normalizes negative. An ABSENT amount stays null rather than becoming a
+    // confident zero — `amount` is optional in the provider's own schema, and
+    // "we do not know what this bill costs" must not read as "this bill costs
+    // nothing" to the engine that reserves money for it.
+    lastAmountMinor: streamAmount(stream.last_amount),
+    averageAmountMinor: streamAmount(stream.average_amount),
     currency: streamCurrency(stream.last_amount) ?? streamCurrency(stream.average_amount) ?? 'USD',
     cadence: CADENCE[stream.frequency] ?? 'unknown',
     maturity: MATURITY[stream.status] ?? 'unknown',

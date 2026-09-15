@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en" data-theme="atelier">
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to resolve in
@@ -38,12 +38,25 @@
        third-party font request on a financial app leaks usage metadata and
        adds a render-blocking dependency the CSP would have to widen for. The
        stacks below degrade to system fonts until the faces land. -->
+  <!-- THEME BOOTSTRAP — must be inline, blocking, and BEFORE the stylesheet.
+       The theme cannot wait for the module bundle: `data-theme` decides every
+       colour token, so resolving it after first paint gives every Graphite
+       user a white flash, and on iOS 26 leaves the system chrome tinted for
+       the wrong pole (Safari 26 samples a real element, not meta theme-color).
+
+       script-src stays strict ('self', no 'unsafe-inline'); this one script is
+       allowed by its SHA-256 hash, listed in src/http/security-headers.ts.
+       test/worker/csp.test.ts re-hashes this exact text and asserts the CSP
+       still contains it, so the two cannot drift apart. If you edit the script
+       below, that test tells you the new hash. -->
+  <script>(function(){try{var p=localStorage.getItem("ballast.theme");if(p!=="atelier"&&p!=="graphite")p=null;var d=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;var t=p||(d?"graphite":"atelier");var e=document.documentElement;e.setAttribute("data-theme",t);e.style.colorScheme=t==="graphite"?"dark":"light"}catch(_){}})();</script>
+
   <link rel="stylesheet" href="/src/styles/index.css" />
 </head>
 <body>
   <div id="app" class="screen">
     <noscript>
-      <p style="padding:20px">Ballast needs JavaScript to show your accounts.</p>
+      <p class="noscript-msg">Ballast needs JavaScript to show your accounts.</p>
     </noscript>
   </div>
   <script type="module" src="/src/main.ts"></script>

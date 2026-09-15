@@ -174,9 +174,17 @@ describe('mapStream', () => {
     expect(mapStream(stream()).lastAmountMinor).toBe(-120_000);
   });
 
-  it('survives an absent amount rather than throwing', () => {
-    // TransactionStreamAmount.amount is OPTIONAL in the SDK.
+  it('reports an absent amount as null, NOT as a $0 obligation', () => {
+    // TransactionStreamAmount.amount is OPTIONAL in the SDK. Coercing it to 0
+    // would hand the forward-obligations engine a confident "$0 bill": funded
+    // at zero, netted out of safe-to-spend at zero, and silently
+    // under-reserving for an obligation that actually has a value.
     const s = mapStream(stream({ last_amount: { iso_currency_code: 'USD' } }));
+    expect(s.lastAmountMinor).toBeNull();
+  });
+
+  it('still maps a real zero as zero', () => {
+    const s = mapStream(stream({ last_amount: { amount: 0, iso_currency_code: 'USD' } }));
     expect(s.lastAmountMinor).toBe(0);
   });
 

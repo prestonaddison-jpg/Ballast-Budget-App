@@ -106,19 +106,56 @@ describe('planReconcile', () => {
     expect(plan.tombstones).toHaveLength(0);
   });
 
-  it('lets a cross-page posting win over an earlier removal of the same key', () => {
-    // The pending removal and the posted arrival are not guaranteed to land in
-    // the same page. When they do coincide, the upsert must win.
+  it('tombstones a genuine removal even when another upsert shares its key', () => {
+    // REGRESSION. An earlier version suppressed any removal whose key was also
+    // being upserted, on the theory that it was a cross-page posting catching
+    // up. That silently swallowed GENUINE removals: a deposit added on page 1
+    // of a drain and reversed on page 3 would be upserted and never
+    // tombstoned, leaving reversed money in the ledger as real.
+    //
+    // Only the explicit pending back-pointer may suppress a removal.
     const plan = planReconcile(
       {
-        added: [txn({ txnKey: 'p2', sourceTransactionId: 'x10', supersedesSourceId: 'other' })],
+        added: [txn({ txnKey: 'k1', sourceTransactionId: 'x10', supersedesSourceId: 'other' })],
         modified: [],
-        removed: [{ sourceTransactionId: 'p2_provider_id', sourceAccountId: 'acc_1' }],
+        removed: [{ sourceTransactionId: 'k1_provider_id', sourceAccountId: 'acc_1' }],
       },
-      (id) => (id === 'p2_provider_id' ? 'p2' : undefined),
+      (id) => (id === 'k1_provider_id' ? 'k1' : undefined),
+    );
+    expect(plan.tombstones).toEqual([{ txnKey: 'k1', sourceTransactionId: 'k1_provider_id' }]);
+    expect(plan.supersededPendingIds).toHaveLength(0);
+  });
+
+  it('still suppresses a cross-page posting, via the back-pointer', () => {
+    // drainSync accumulates every page before reconciling, so the posted
+    // transaction from a later page is visible when the earlier page's removal
+    // is considered. The back-pointer alone is enough; no key-collision
+    // heuristic is needed.
+    const plan = planReconcile(
+      {
+        added: [txn({ txnKey: 'p9', sourceTransactionId: 'posted_9', supersedesSourceId: 'p9' })],
+        modified: [],
+        removed: [{ sourceTransactionId: 'p9', sourceAccountId: 'acc_1' }],
+      },
+      (id) => (id === 'p9' ? 'p9' : undefined),
     );
     expect(plan.tombstones).toHaveLength(0);
-    expect(plan.supersededPendingIds).toEqual(['p2_provider_id']);
+    expect(plan.supersededPendingIds).toEqual(['p9']);
+  });
+
+  it('emits BOTH an upsert and a tombstone when a drain adds then removes', () => {
+    // The apply order (upserts, then tombstones) is what makes the final state
+    // "removed". Both operations must be present for that to be possible.
+    const plan = planReconcile(
+      {
+        added: [txn({ txnKey: 'z1', sourceTransactionId: 'z1' })],
+        modified: [],
+        removed: [{ sourceTransactionId: 'z1', sourceAccountId: 'acc_1' }],
+      },
+      (id) => (id === 'z1' ? 'z1' : undefined),
+    );
+    expect(plan.upserts.map((u) => u.txnKey)).toEqual(['z1']);
+    expect(plan.tombstones.map((t) => t.txnKey)).toEqual(['z1']);
   });
 
   it('is idempotent — replaying the same page yields the same plan', () => {

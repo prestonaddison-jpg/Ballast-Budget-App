@@ -16,7 +16,7 @@
 
 import { Hono } from 'hono';
 import type { Env, SyncJob } from './env';
-import { isLocalDev } from './env';
+import { assertEnv, isLocalDev } from './env';
 import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
@@ -94,6 +94,21 @@ export default {
     // API and webhooks are the Worker's. Everything else is the PWA shell,
     // served by the assets binding (with SPA fallback for deep links).
     if (url.pathname.startsWith('/api/')) {
+      // Fail fast and loudly on missing configuration. Without this the
+      // Worker runs happily until the first bank connection, then fails
+      // somewhere far less obvious. Checked only on the API path so a
+      // misconfigured deploy still serves the shell (and its error screen)
+      // rather than a blank page.
+      try {
+        assertEnv(env);
+      } catch (err) {
+        console.error('configuration_error', {
+          message: err instanceof Error ? err.message : String(err),
+        });
+        return error(503, 'misconfigured', 'The server is not configured.', {
+          secure: !isLocalDev(env),
+        });
+      }
       return app.fetch(request, env, ctx);
     }
     return withSecurityHeaders(await env.ASSETS.fetch(request), env);

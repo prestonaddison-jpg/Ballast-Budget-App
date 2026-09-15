@@ -39,6 +39,15 @@ export interface GaugeOptions {
   sublabel?: string;
   /** Screen-reader description of what the number means. */
   describe?: (value: number, tone: Tone | null) => string;
+  /**
+   * True when the gauge sits on the navy signature ground (the hero), so it
+   * should use the gold-on-navy treatment rather than the on-page one.
+   *
+   * Without this the `.on-sig` branch in gauge.css is unreachable and the ONE
+   * signature element in the whole app silently renders in the ordinary
+   * accent — the navy/gold is never spent where the blueprint says to spend it.
+   */
+  onSignature?: boolean;
 }
 
 const NS = 'http://www.w3.org/2000/svg';
@@ -113,7 +122,7 @@ export function createGauge(opts: GaugeOptions): HTMLElement {
   const tone = toneOf(value, bands);
 
   const wrap = document.createElement('div');
-  wrap.className = 'gauge';
+  wrap.className = opts.onSignature ? 'gauge on-sig' : 'gauge';
 
   const svg = el('svg', {
     viewBox: '0 0 200 182',

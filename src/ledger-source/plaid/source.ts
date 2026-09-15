@@ -72,13 +72,12 @@ export class PlaidLedgerSource implements LedgerSource {
 
   async createLinkSession(input: {
     userId: string;
-    reauthItemId?: string;
-    accessToken?: string;
+    reauthAccessToken?: string;
     webhookUrl: string;
     redirectUri?: string;
     daysRequested?: number;
   }): Promise<LinkSession> {
-    const isUpdateMode = Boolean(input.accessToken);
+    const isUpdateMode = Boolean(input.reauthAccessToken);
 
     const body: Record<string, unknown> = {
       client_name: 'Ballast',
@@ -96,7 +95,7 @@ export class PlaidLedgerSource implements LedgerSource {
       // afterwards. Note also that an update-mode link_token expires in 30
       // MINUTES rather than the usual 4 hours, so it must be minted
       // just-in-time rather than cached.
-      body.access_token = input.accessToken;
+      body.access_token = input.reauthAccessToken;
       body.products = [];
     } else {
       // 'transactions' is the correct product string. 'recurring_transactions'

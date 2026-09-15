@@ -37,6 +37,16 @@
  * survive, the ledger reverses rather than erases (§4 "reversals self-heal"),
  * and a later posted transaction reattaches to the same key.
  *
+ * WHAT MUST *NOT* SUPPRESS A REMOVAL: the fact that some upsert happens to
+ * resolve to the same txnKey. That test looks like a safe way to let a
+ * cross-page posting win, and it silently swallows GENUINE removals — a
+ * transaction added on page 1 of a drain and reversed on page 3 would be
+ * upserted and never tombstoned, leaving a reversed deposit sitting in the
+ * ledger as real money. Only the explicit `pending_transaction_id`
+ * back-pointer suppresses a removal. The cross-page posting case is already
+ * covered by that same back-pointer, because the accumulated drain sees every
+ * page's `added` before any removal is considered.
+ *
  * RETENTION: a tombstoned row must stay QUERYABLE by its provider id for at
  * least 14 days. Plaid documents pending -> posted as "one to five business
  * days, although it can take up to fourteen days in rare situations", and the
@@ -90,6 +100,15 @@ export interface ReconcileTombstone {
   sourceTransactionId: string;
 }
 
+/**
+ * APPLY ORDER IS PART OF THE CONTRACT: upserts first, then tombstones.
+ *
+ * A page (or an accumulated drain) can legitimately contain both an upsert and
+ * a tombstone for the same txnKey — a transaction added early in a drain and
+ * genuinely removed later in it. Applying upserts first and tombstones second
+ * leaves the final state as "removed", which is correct. The reverse order
+ * would resurrect a deleted transaction.
+ */
 export interface ReconcilePlan {
   upserts: ReconcileUpsert[];
   /**
@@ -143,12 +162,6 @@ export function planReconcile(
     if (key == null) {
       // Never stored it — nothing to reverse. (Plaid can report a removal for
       // a transaction we never received, e.g. removed during initial backfill.)
-      continue;
-    }
-    // A removal whose key is ALSO being upserted in this page is a
-    // cross-page posting catching up; the upsert wins.
-    if (upserts.some((u) => u.txnKey === key)) {
-      supersededPendingIds.push(ref.sourceTransactionId);
       continue;
     }
     tombstones.push({ txnKey: key, sourceTransactionId: ref.sourceTransactionId });

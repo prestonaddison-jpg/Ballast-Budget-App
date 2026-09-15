@@ -162,3 +162,38 @@ describe('the PWA document itself', () => {
     expect(html).toContain('manifest.webmanifest');
   });
 });
+
+describe('the served document and its CSP agree', () => {
+  /**
+   * The unit test in test/unit/csp.test.ts hashes the SOURCE index.html. This
+   * one hashes what is actually SERVED, after Vite has processed it — the only
+   * version a browser ever sees. If a future build step minifies or rewrites
+   * the inline bootstrap, the source test would still pass while production
+   * silently refused to run the script and every dark-pole user got a white
+   * flash back.
+   */
+  it('allows the inline script the shell actually ships', async () => {
+    const res = await SELF.fetch('https://example.com/');
+    const html = await res.text();
+    const csp = res.headers.get('Content-Security-Policy') ?? '';
+
+    const match = html.match(/<script>([\s\S]*?)<\/script>/);
+    expect(match, 'the built shell has no inline script').toBeTruthy();
+
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(match![1]));
+    let binary = '';
+    for (const b of new Uint8Array(digest)) binary += String.fromCharCode(b);
+    const hash = `'sha256-${btoa(binary)}'`;
+
+    expect(
+      csp.includes(hash),
+      `The served CSP does not allow the served inline script.\nExpected: ${hash}`,
+    ).toBe(true);
+  });
+
+  it('resolves the theme before paint rather than hardcoding a pole', async () => {
+    const html = await (await SELF.fetch('https://example.com/')).text();
+    expect(html).not.toMatch(/<html[^>]*data-theme=/);
+    expect(html).toContain('ballast.theme');
+  });
+});

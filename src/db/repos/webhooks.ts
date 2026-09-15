@@ -76,3 +76,18 @@ export async function markWebhookProcessed(
     .bind(status, now, errorDetail ?? null, id)
     .run();
 }
+
+/**
+ * Release an intake row so a retry of the SAME delivery is accepted again.
+ *
+ * The intake row is written before the work is attempted, which is what makes
+ * dedup race-safe. But it also means a failed attempt leaves a row that the
+ * unique index will use to reject the very retry the 500 asked Plaid for — the
+ * webhook would be dropped forever, having asked to be resent. Deleting the
+ * row on failure closes that loop.
+ *
+ * The event is preserved in the audit log, so nothing is lost for forensics.
+ */
+export async function releaseWebhookIntake(db: D1Database, id: string): Promise<void> {
+  await db.prepare('DELETE FROM webhook_events WHERE id = ?').bind(id).run();
+}

@@ -2,10 +2,11 @@
  * Security response headers.
  *
  * CSP NOTES:
- *   - No 'unsafe-inline' for scripts. The shell loads one module bundle.
- *   - `style-src 'self' 'unsafe-inline'` is a deliberate, narrow concession:
- *     the components set a handful of inline styles (gauge sweep offset,
- *     meter width). Scripts, which are the actual XSS vector, stay strict.
+ *   - No 'unsafe-inline' anywhere. The shell loads one module bundle, plus a
+ *     single inline theme-bootstrap script allowed by SHA-256 hash.
+ *   - style-src is 'self' only. CSP governs <style> blocks and style
+ *     ATTRIBUTES; it does not govern CSSOM writes like `el.style.width = …`,
+ *     which is what the components actually do.
  *   - `connect-src 'self'` — the PWA talks to its own Worker and nothing else.
  *     Plaid is called server-side only, so the browser needs no Plaid origin.
  *     Plaid Link (Slice 1+) will require widening this; the comment is here so
@@ -30,8 +31,16 @@ const CSP = [
   "default-src 'self'",
   "base-uri 'none'",
   "object-src 'none'",
-  "script-src 'self'",
-  "style-src 'self' 'unsafe-inline'",
+  // The hash covers the inline theme-bootstrap script in web/index.html,
+  // which must run before first paint to avoid a light flash for dark-pole
+  // users. Everything else is 'self'. test/worker/csp.test.ts re-computes the
+  // hash from index.html and asserts it is still listed here.
+  "script-src 'self' 'sha256-tcK04qrUXA6vmj5/fd3mzqnvcmFzvXf5don0dMtAZ4Q='",
+  // No 'unsafe-inline'. The components set styles through the CSSOM
+  // (element.style.*), which CSP does not govern at all — the earlier comment
+  // claiming otherwise was simply wrong about how CSP works. The one real
+  // inline style attribute (the <noscript> message) is now a class.
+  "style-src 'self'",
   "img-src 'self' data:",
   "font-src 'self'",
   "connect-src 'self'",

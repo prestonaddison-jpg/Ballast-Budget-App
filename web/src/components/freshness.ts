@@ -66,11 +66,14 @@ export function computeFreshness(input: FreshnessInput): Freshness {
         'This bank will stop sharing data shortly. Reconnecting now keeps the numbers honest.',
     };
   }
-  if (input.connection === 'never' || input.lastSyncedAt == null) {
-    return { state: 'stale', text: 'not synced yet' };
-  }
+  // Checked BEFORE the never-synced branch: a first-ever sync in flight is
+  // exactly when the operator most wants to see "syncing", and returning
+  // "not synced yet" there reads as though nothing is happening.
   if (input.syncing) {
     return { state: 'syncing', text: 'syncing…' };
+  }
+  if (input.connection === 'never' || input.lastSyncedAt == null) {
+    return { state: 'stale', text: 'not synced yet' };
   }
 
   const age = Math.max(0, now - input.lastSyncedAt);

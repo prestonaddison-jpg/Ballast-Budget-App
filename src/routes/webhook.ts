@@ -25,7 +25,7 @@ import { isLocalDev } from '../env';
 import { json, error } from '../http/responses';
 import { PlaidClient, type PlaidEnvironment } from '../ledger-source/plaid/client';
 import { PlaidLedgerSource } from '../ledger-source/plaid/source';
-import { markWebhookProcessed, recordWebhook } from '../db/repos/webhooks';
+import { markWebhookProcessed, recordWebhook, releaseWebhookIntake } from '../db/repos/webhooks';
 import { findItemByProviderId, updateItemStatus } from '../db/repos/connections';
 import { audit } from '../db/repos/audit';
 import { LedgerSourceError } from '../ledger-source/types';
@@ -171,8 +171,22 @@ webhookRoutes.post('/plaid', async (c) => {
     return json({ ok: true, handled: true }, ctx);
   } catch (err) {
     const detail = err instanceof Error ? err.message : 'unknown';
-    await markWebhookProcessed(env.DB, intake.id, 'failed', now, detail);
     console.error('plaid_webhook_failed', { itemId: item.id, detail });
+
+    // Record what happened, then RELEASE the intake row. The 500 below asks
+    // Plaid to retry; without the release, the unique index would reject that
+    // retry as a duplicate and the webhook would be lost forever having
+    // explicitly asked to be resent.
+    await audit(env.DB, {
+      userId: item.user_id,
+      action: 'webhook.rejected',
+      subjectType: 'source_item',
+      subjectId: item.id,
+      detail: { stage: 'processing', reason: detail },
+      now,
+    });
+    await releaseWebhookIntake(env.DB, intake.id);
+
     // 500 so Plaid DOES retry — the signature was valid and the work is owed.
     return error(500, 'internal', 'Could not process webhook.', ctx);
   }

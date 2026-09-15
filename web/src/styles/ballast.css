@@ -27,11 +27,35 @@ body {
   padding-top: env(safe-area-inset-top, 0px);
 }
 
+/* The status-bar strip.
+ *
+ * `apple-mobile-web-app-status-bar-style: black-translucent` renders the
+ * status bar over the page with WHITE glyphs. Over Atelier's near-white
+ * #f3f4f2 those glyphs are invisible — the clock and battery simply vanish.
+ * So the strip under them carries the navy signature ground in BOTH poles,
+ * which keeps white legible and, on iOS 26, is also what tints the chrome
+ * (Safari 26 ignores meta theme-color and samples a fixed element at the
+ * viewport edge instead). */
+.screen::before {
+  content: '';
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: env(safe-area-inset-top, 0px);
+  background: var(--sig-ground);
+  z-index: 10;
+  pointer-events: none;
+}
+
 .scroll {
   flex: 1;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
-  padding-inline: max(16px, env(safe-area-inset-left, 0px));
+  /* Each inline edge takes ITS OWN inset. A single `padding-inline` value
+     applies the LEFT inset to both sides, so in landscape on a notched device
+     the right-hand gutter is wrong and content sits under the sensor housing.
+     env(safe-area-inset-right) must appear somewhere, and this is where. */
+  padding-inline-start: max(16px, env(safe-area-inset-left, 0px));
+  padding-inline-end: max(16px, env(safe-area-inset-right, 0px));
 }
 
 .body { display: flex; flex-direction: column; gap: 14px; padding-block: 14px; }
@@ -100,7 +124,17 @@ h1, h2, h3 { font-family: var(--display), system-ui, sans-serif; margin: 0; lett
 .hero .freshness { color: rgba(244, 246, 250, .74); }
 
 /* --- Focal alert extras ---------------------------------------------------- */
+/* Tone must actually reach the paint. Without these, `data-tone` is inert and
+ * EVERY alert renders with the red --bad edge — including "connect an
+ * account", which is not a failure and must not be shouted at the operator
+ * (§14: no shame, no red scolding). */
 .needs .d { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex: none; }
+.needs[data-tone='good']::before,
+.needs[data-tone='good'] .d { background: var(--good); }
+.needs[data-tone='watch']::before,
+.needs[data-tone='watch'] .d { background: var(--watch); }
+.needs[data-tone='neutral']::before,
+.needs[data-tone='neutral'] .d { background: var(--accent); }
 .needs .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .needs .txt strong { font-weight: 650; font-size: .95rem; }
 .needs .txt span { font-size: .82rem; color: var(--soft); }
@@ -133,6 +167,8 @@ h1, h2, h3 { font-family: var(--display), system-ui, sans-serif; margin: 0; lett
  * thing). On desktop it becomes a left rail + a top "needs attention" banner. */
 .nowbar {
   padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  padding-inline-start: max(18px, env(safe-area-inset-left, 0px));
+  padding-inline-end: max(18px, env(safe-area-inset-right, 0px));
   position: sticky; bottom: 0;
 }
 .nowbar .nb {
@@ -190,3 +226,7 @@ h1, h2, h3 { font-family: var(--display), system-ui, sans-serif; margin: 0; lett
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
 }
+
+/* The <noscript> message. A class rather than a style attribute, so that
+ * style-src does not need 'unsafe-inline'. */
+.noscript-msg { padding: 20px; }

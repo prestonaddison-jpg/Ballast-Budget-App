@@ -372,9 +372,14 @@ if ('serviceWorker' in navigator) {
   // cannot hard-refresh their way out of it. Reload exactly once when control
   // changes. The guard matters: without it, claim() during the initial
   // registration would reload the page on every first visit.
+  // `reloading` alone is a fire-once guard, not a "was this page already
+  // controlled" guard — so on the FIRST install, clients.claim() changes the
+  // controller and reloads the page, which is exactly the case this is meant
+  // to avoid. Capture whether a controller existed at registration time.
+  const wasControlled = navigator.serviceWorker.controller !== null;
   let reloading = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    if (reloading) return;
+    if (!wasControlled || reloading) return;
     reloading = true;
     window.location.reload();
   });
