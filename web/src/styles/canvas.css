@@ -1,0 +1,123 @@
+/* ============================================================================
+ * Canvas v1 — the zone grid and its tiles (Blueprint §13).
+ *
+ * COLOR RULE, restated here because it is the easiest thing to break:
+ * progress uses --accent. NEVER --bad, --watch or --good. An envelope that is
+ * 20% funded is 20% funded, not failing. The status tokens are reserved for
+ * genuine status (stale sync, overdue obligation); spending them on "not yet
+ * full" would teach the operator to ignore red, and red is load-bearing
+ * elsewhere.
+ * ========================================================================== */
+
+.canvas { display: flex; flex-direction: column; gap: 26px; }
+
+/* --- Zones: the chunking that actually reduces load ---------------------- */
+.zone { display: flex; flex-direction: column; gap: 4px; }
+
+.zone-title {
+  font-size: .78rem;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--soft);
+}
+
+.zone-caption {
+  margin: 0 0 10px;
+  font-size: .82rem;
+  color: var(--soft);
+}
+
+/* No tile cap: recognition, not recall (A.7 / the Miller's correction).
+ * auto-fill rather than a fixed count, so 8-12 tiles stay legible on a phone
+ * and spread out rather than shrinking on a desktop rail. */
+.zone-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+  gap: 10px;
+}
+
+/* --- Tile ---------------------------------------------------------------
+ * A button, not a card containing a button: tap-to-act is primary, so the
+ * whole tile is the target (Fitts's). */
+.tile {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  width: 100%;
+  min-height: 104px;
+  padding: 13px 14px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ink);
+  background: var(--card);
+  border: 1px solid var(--cardln);
+  border-radius: 15px;
+  transition:
+    transform var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
+}
+
+.tile:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--cardln)); }
+/* Doherty: the tap must feel instant. transform only — never layout. */
+.tile:active:not(:disabled) { transform: scale(.985); }
+.tile:disabled { cursor: default; opacity: .8; }
+
+.tile-head { display: flex; align-items: baseline; gap: 8px; }
+
+.tile-name {
+  font-weight: 650;
+  font-size: .92rem;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tile-kind {
+  margin-left: auto;
+  flex: none;
+  font-size: .62rem;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--soft);
+}
+
+.tile-amount {
+  font-family: var(--display), system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.55rem;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.05;
+}
+
+/* The shared .tide meter, sized down for a tile. Fill is --accent2 -> --accent
+ * from the shared component layer: brand, not status. */
+.tile-tide { height: 5px; margin-top: 2px; }
+
+.tile-progress {
+  font-size: .72rem;
+  color: var(--soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.tile-note { font-size: .72rem; color: var(--soft); }
+
+/* Unallocated is the one tile that earns emphasis: it is the money with no job
+ * yet, and the whole app exists to get it one. A quiet accent edge, not a
+ * different color language. */
+.tile[data-type='unallocated'] {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--cardln));
+  background: linear-gradient(
+    180deg,
+    color-mix(in srgb, var(--accent) 7%, var(--card)),
+    var(--card) 62%
+  );
+}
+
+@media (min-width: 860px) {
+  .zone-grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
+}
