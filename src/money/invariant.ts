@@ -73,6 +73,20 @@ export function sumEnvelopeBalances(balances: readonly { balanceMinor: Minor }[]
  * Callers must pass only that entity's envelopes and only that entity's
  * accounts; mixing entities here would silently net one against another.
  */
+/**
+ * DIAGNOSTIC, not a gate.
+ *
+ * Under the residual design (migrations/0002) conservation is an algebraic
+ * identity, so `balanced` is the only outcome this can report when the data is
+ * consistent — which makes it a useful CANARY: a 'cash_ahead' or
+ * 'envelopes_ahead' result means something upstream is broken, not that a
+ * routine reconciliation is due.
+ *
+ * `envelopes_ahead` is the one case an operator will genuinely see, and it is
+ * not a bug: it means cash fell below what has already been allocated, so
+ * unallocated has gone negative. That is real and must be SHOWN — "you are
+ * over-allocated by $300" — rather than smoothed away.
+ */
 export function checkInvariant(
   envelopeBalances: readonly { balanceMinor: Minor }[],
   accounts: readonly AccountCash[],
@@ -103,54 +117,6 @@ export function checkInvariant(
     cashTotalMinor,
     driftMinor,
     unknownAccountIds,
-  };
-}
-
-/**
- * The reconciling movement that restores the invariant, or null if none is
- * needed.
- *
- * "with `unallocated` absorbing slack" (§4): drift is always taken to or from
- * `unallocated`, never from a purpose envelope. That matters behaviourally —
- * silently draining the tax envelope to make the books balance would be the
- * single worst thing this app could do. If unallocated cannot cover a negative
- * drift, the shortfall is reported rather than forced, so the operator decides
- * what to give up.
- */
-export interface ReconcilingMove {
-  /** Positive: money the entity has that no envelope claims yet. */
-  direction: 'into_unallocated' | 'out_of_unallocated';
-  amountMinor: Minor;
-  /** True when unallocated cannot absorb the whole negative drift. */
-  shortfall: boolean;
-  /** How much could NOT be taken from unallocated. */
-  shortfallMinor: Minor;
-}
-
-export function planReconcilingMove(
-  check: InvariantCheck,
-  unallocatedBalanceMinor: Minor,
-): ReconcilingMove | null {
-  if (check.status === 'indeterminate' || check.driftMinor == null || check.driftMinor === 0) {
-    return null;
-  }
-
-  if (check.driftMinor > 0) {
-    return {
-      direction: 'into_unallocated',
-      amountMinor: check.driftMinor,
-      shortfall: false,
-      shortfallMinor: 0,
-    };
-  }
-
-  const needed = -check.driftMinor;
-  const canTake = Math.min(needed, Math.max(0, unallocatedBalanceMinor));
-  return {
-    direction: 'out_of_unallocated',
-    amountMinor: canTake,
-    shortfall: canTake < needed,
-    shortfallMinor: needed - canTake,
   };
 }
 

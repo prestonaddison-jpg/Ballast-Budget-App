@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toneOf } from '../../web/src/components/gauge';
+import { toneOf } from '../../web/src/lib/gauge-bands';
 
 /**
  * "Every gauge ships a target marker + good/watch/bad bands" (Blueprint A.7,

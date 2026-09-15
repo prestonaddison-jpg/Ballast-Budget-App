@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeFreshness, relativeAge } from '../../web/src/components/freshness';
+import { computeFreshness, relativeAge } from '../../web/src/lib/freshness-state';
 
 const NOW = 1_800_000_000_000; // ms
 

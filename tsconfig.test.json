@@ -12,5 +12,16 @@
     ],
     "noEmit": true
   },
-  "include": ["test/**/*.ts", "vitest.config.ts", "web/src/**/*.ts"]
+  // MUST be restated. `exclude` is INHERITED from the base config, which
+  // excludes "test" and "web" — and exclude filters the results of include, so
+  // without this override every file listed below was silently dropped and the
+  // test tree was never typechecked at all.
+  "exclude": ["node_modules", "dist"],
+  // web/src is NOT listed. Browser components are typechecked by
+  // web/tsconfig.json against DOM lib; checking them again HERE would check
+  // them against @cloudflare/workers-types, whose `Element` (HTMLRewriter's)
+  // shadows the DOM one and makes every `.append(node)` an error. The tests
+  // import only the PURE modules under web/src/lib, which touch no DOM — that
+  // separation is why the split exists.
+  "include": ["test/**/*.ts", "vitest.config.ts"]
 }

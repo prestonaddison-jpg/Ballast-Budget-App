@@ -1,8 +1,7 @@
 /**
- * Envelope tile — the unit of the Canvas (Blueprint §13).
+ * Envelope tile — the unit of the Canvas (Blueprint §13). Rendering only.
  *
- * "Envelope tiles in an iOS-first zone-grid. Tap-to-act primary, drag as an
- * enhancement. Percentage-progress framing, never shame colors."
+ * The presentation math and the rules behind it live in lib/envelope-math.ts.
  *
  * TWO RULES THAT LOOK LIKE STYLE AND ARE NOT:
  *
@@ -10,33 +9,25 @@
  *    20% funded. Progress uses the brand accent, never --bad. The status
  *    colors are reserved for genuine status (a stale sync, an overdue
  *    obligation), because if "not yet full" is painted red then red stops
- *    meaning anything and the operator learns to ignore it. This is the
- *    difference between a tool and a nag, and §14 is explicit about it.
+ *    meaning anything and the operator learns to ignore it (§14).
  *
  * 2. PERCENTAGE-PROGRESS FRAMING. A tile says "62% of $4,000", not "$1,520
  *    short". Same arithmetic, opposite emotional register — and the shortfall
  *    framing is the one that makes people avoid opening the app.
  *
- * Tiles are BUTTONS, not cards with a button inside: tap-to-act is primary, so
- * the whole tile is the target (Fitts's, and thumb-reachable on a phone).
+ * Tiles are BUTTONS, not cards containing a button: tap-to-act is primary, so
+ * the whole tile is the target (Fitts's).
  */
 
-import type { Tone } from './gauge';
+import {
+  TYPE_LABEL,
+  formatMoney,
+  formatMoneyExact,
+  fundedFraction,
+  type EnvelopeTileModel,
+} from '../lib/envelope-math';
 
-export type EnvelopeType = 'unallocated' | 'buffer' | 'tax' | 'spend' | 'save';
-
-export interface EnvelopeTileModel {
-  id: string;
-  name: string;
-  type: EnvelopeType;
-  /** Current balance in minor units. Derived from the ledger, never stored. */
-  balanceMinor: number;
-  /** Target in minor units, or null for an envelope with no target. */
-  targetMinor: number | null;
-  /** ISO date, when the operator gave the target a deadline. */
-  targetDate?: string | null;
-  currency: string;
-}
+export * from '../lib/envelope-math';
 
 export interface EnvelopeTileOptions {
   envelope: EnvelopeTileModel;
@@ -44,52 +35,6 @@ export interface EnvelopeTileOptions {
   onSelect?: (envelope: EnvelopeTileModel) => void;
   /** Rendered small under the name, e.g. "due in 14 days". */
   note?: string;
-}
-
-const TYPE_LABEL: Record<EnvelopeType, string> = {
-  unallocated: 'Unallocated',
-  buffer: 'Buffer',
-  tax: 'Tax',
-  spend: 'Spend',
-  save: 'Save',
-};
-
-export function formatMoney(minor: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    // Whole dollars on a tile: cents are noise at a glance, and the Canvas is
-    // a glanceable surface. The exact figure lives on the detail view.
-    maximumFractionDigits: 0,
-  }).format(minor / 100);
-}
-
-export function formatMoneyExact(minor: number, currency = 'USD'): string {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(minor / 100);
-}
-
-/**
- * Funded fraction, clamped to [0,1].
- *
- * Returns null when there is no target — an envelope without one is not "0%
- * funded", it simply has no notion of progress, and rendering an empty bar
- * would imply a goal the operator never set.
- */
-export function fundedFraction(balanceMinor: number, targetMinor: number | null): number | null {
-  if (targetMinor == null || targetMinor <= 0) return null;
-  const raw = balanceMinor / targetMinor;
-  return raw < 0 ? 0 : raw > 1 ? 1 : raw;
-}
-
-/**
- * Progress is deliberately NOT a Tone.
- *
- * Exported so the intent is greppable: if a future change starts colouring
- * tiles by how full they are, this is the function that should have been used
- * and wasn't.
- */
-export function progressToneIsIntentionallyAbsent(): Tone | null {
-  return null;
 }
 
 export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {

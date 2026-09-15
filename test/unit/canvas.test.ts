@@ -4,8 +4,8 @@ import {
   formatMoneyExact,
   fundedFraction,
   type EnvelopeTileModel,
-} from '../../web/src/components/envelope-tile';
-import { defaultZoneFor, groupIntoZones } from '../../web/src/components/zone-grid';
+} from '../../web/src/lib/envelope-math';
+import { defaultZoneFor, groupIntoZones } from '../../web/src/lib/zones';
 
 const env = (over: Partial<EnvelopeTileModel>): EnvelopeTileModel => ({
   id: 'e1',

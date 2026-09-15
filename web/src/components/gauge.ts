@@ -14,15 +14,9 @@
  * alone (A.8).
  */
 
-export type Tone = 'good' | 'watch' | 'bad';
+import { TONE_WORD, toneOf, type GaugeBand, type Tone } from '../lib/gauge-bands';
 
-export interface GaugeBand {
-  /** Band start, in value units (inclusive). */
-  from: number;
-  /** Band end, in value units (exclusive, except the last band). */
-  to: number;
-  tone: Tone;
-}
+export * from '../lib/gauge-bands';
 
 export interface GaugeOptions {
   value: number;
@@ -94,22 +88,6 @@ function el<K extends keyof SVGElementTagNameMap>(
   for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
   return node;
 }
-
-export function toneOf(value: number, bands: GaugeBand[] | undefined): Tone | null {
-  if (!bands || bands.length === 0) return null;
-  for (let i = 0; i < bands.length; i++) {
-    const b = bands[i];
-    const last = i === bands.length - 1;
-    if (value >= b.from && (last ? value <= b.to : value < b.to)) return b.tone;
-  }
-  return null;
-}
-
-const TONE_WORD: Record<Tone, string> = {
-  good: 'healthy',
-  watch: 'watch',
-  bad: 'short',
-};
 
 const prefersReducedMotion = (): boolean =>
   typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;

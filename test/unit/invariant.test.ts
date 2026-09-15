@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   checkInvariant,
-  planReconcilingMove,
   safeToSpend,
   sumEnvelopeBalances,
   type AccountCash,
@@ -86,50 +85,24 @@ describe('sumEnvelopeBalances', () => {
   });
 });
 
-describe('planReconcilingMove', () => {
-  it('absorbs new cash INTO unallocated', () => {
+describe('there is nothing to reconcile', () => {
+  it('reports drift as a CANARY, not as routine work', () => {
+    // Under the residual design (migrations/0002) conservation is an algebraic
+    // identity, so a non-zero drift here means something upstream is broken —
+    // not that a reconciliation job is due. There is deliberately no
+    // planReconcilingMove: the earlier design needed one, this one cannot.
     const check = checkInvariant(bal(60_000), [acct()]);
-    const move = planReconcilingMove(check, 60_000);
-    expect(move).toEqual({
-      direction: 'into_unallocated',
-      amountMinor: 40_000,
-      shortfall: false,
-      shortfallMinor: 0,
-    });
+    expect(check.status).toBe('cash_ahead');
+    expect(check.driftMinor).toBe(40_000);
   });
 
-  it('takes a shortfall OUT OF unallocated, never a purpose envelope', () => {
-    // Silently draining the tax envelope to balance the books would be the
-    // single worst thing this app could do.
+  it('treats envelopes_ahead as a real, showable state', () => {
+    // The one case an operator genuinely sees: cash fell below what was
+    // already allocated, so unallocated has gone negative. That must be SHOWN
+    // ("over-allocated by $500"), never smoothed away by draining reserves.
     const check = checkInvariant(bal(150_000), [acct()]);
-    const move = planReconcilingMove(check, 80_000);
-    expect(move?.direction).toBe('out_of_unallocated');
-    expect(move?.amountMinor).toBe(50_000);
-    expect(move?.shortfall).toBe(false);
-  });
-
-  it('REPORTS a shortfall rather than forcing it', () => {
-    // Unallocated has 10k but 50k must come back out. The app takes what it
-    // can and tells the operator, instead of reaching into reserves.
-    const check = checkInvariant(bal(150_000), [acct()]);
-    const move = planReconcilingMove(check, 10_000);
-    expect(move?.amountMinor).toBe(10_000);
-    expect(move?.shortfall).toBe(true);
-    expect(move?.shortfallMinor).toBe(40_000);
-  });
-
-  it('never takes from a negative unallocated balance', () => {
-    const check = checkInvariant(bal(150_000), [acct()]);
-    const move = planReconcilingMove(check, -5_000);
-    expect(move?.amountMinor).toBe(0);
-    expect(move?.shortfallMinor).toBe(50_000);
-  });
-
-  it('does nothing when balanced or indeterminate', () => {
-    expect(planReconcilingMove(checkInvariant(bal(100_000), [acct()]), 0)).toBeNull();
-    expect(
-      planReconcilingMove(checkInvariant(bal(1), [acct({ availableMinor: null })]), 0),
-    ).toBeNull();
+    expect(check.status).toBe('envelopes_ahead');
+    expect(check.driftMinor).toBe(-50_000);
   });
 });
 
