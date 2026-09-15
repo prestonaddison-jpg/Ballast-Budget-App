@@ -19,13 +19,7 @@
  * the whole tile is the target (Fitts's).
  */
 
-import {
-  TYPE_LABEL,
-  formatMoney,
-  formatMoneyExact,
-  fundedFraction,
-  type EnvelopeTileModel,
-} from '../lib/envelope-math';
+import { TYPE_LABEL, presentTile, type EnvelopeTileModel } from '../lib/envelope-math';
 
 export * from '../lib/envelope-math';
 
@@ -39,7 +33,9 @@ export interface EnvelopeTileOptions {
 
 export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {
   const { envelope } = opts;
-  const fraction = fundedFraction(envelope.balanceMinor, envelope.targetMinor);
+  // Every decision about WHAT to show is made in lib/envelope-math.ts, which is
+  // testable without a DOM. This function only builds elements.
+  const view = presentTile(envelope);
 
   const tile = document.createElement('button');
   tile.type = 'button';
@@ -61,29 +57,22 @@ export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {
 
   const amount = document.createElement('div');
   amount.className = 'tile-amount money';
-  amount.textContent = formatMoney(envelope.balanceMinor, envelope.currency);
+  amount.textContent = view.amountText;
 
   tile.append(head, amount);
 
-  if (fraction != null && envelope.targetMinor != null) {
-    const pct = Math.round(fraction * 100);
-
+  if (view.progressPercent != null) {
     const meter = document.createElement('div');
     meter.className = 'tide tile-tide';
     // The shared .tide component reads --p for its fill width.
-    meter.style.setProperty('--p', `${pct}%`);
+    meter.style.setProperty('--p', `${view.progressPercent}%`);
+    tile.append(meter);
+  }
 
+  if (view.captionText) {
     const caption = document.createElement('div');
     caption.className = 'tile-progress';
-    // Percentage-of-target, never "short by". Same numbers, and the operator
-    // keeps opening the app.
-    caption.textContent = `${pct}% of ${formatMoney(envelope.targetMinor, envelope.currency)}`;
-
-    tile.append(meter, caption);
-  } else if (envelope.type === 'unallocated') {
-    const caption = document.createElement('div');
-    caption.className = 'tile-progress';
-    caption.textContent = 'ready to allocate';
+    caption.textContent = view.captionText;
     tile.append(caption);
   }
 
@@ -96,15 +85,9 @@ export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {
 
   // One accessible name carrying everything the tile shows, so a screen reader
   // does not have to reconstruct it from four separate nodes.
-  const parts = [
-    envelope.name,
-    TYPE_LABEL[envelope.type],
-    formatMoneyExact(envelope.balanceMinor, envelope.currency),
-  ];
-  if (fraction != null && envelope.targetMinor != null) {
-    parts.push(
-      `${Math.round(fraction * 100)} percent of ${formatMoneyExact(envelope.targetMinor, envelope.currency)}`,
-    );
+  const parts = [envelope.name, TYPE_LABEL[envelope.type], view.amountLabel];
+  if (view.progressPercent != null && envelope.targetMinor != null) {
+    parts.push(`${view.progressPercent} percent funded`);
   }
   if (opts.note) parts.push(opts.note);
   tile.setAttribute('aria-label', parts.join(', '));

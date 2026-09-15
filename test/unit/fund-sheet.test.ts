@@ -71,3 +71,42 @@ describe('suggestAmounts', () => {
     expect(chips.length).toBeLessThanOrEqual(4);
   });
 });
+
+describe('suggestAmounts — chips must stay useful at any balance', () => {
+  it('always keeps "all of it", however large', () => {
+    // The regression this pins: candidates used to be sorted ascending and
+    // truncated to four, so with $15,000 available the chips were $50, $100,
+    // $250 and $500 — four chips, every one trivial, and "all of it" dropped
+    // off the end. The chips exist so the common case is ONE TAP; that set
+    // guaranteed typing instead.
+    const chips = suggestAmounts(15_000_00, 0, null);
+    expect(chips).toContain(15_000_00);
+    expect(chips).toHaveLength(4);
+  });
+
+  it('scales the round amounts to the balance instead of clustering at the bottom', () => {
+    const chips = suggestAmounts(15_000_00, 0, null);
+    // Nothing trivial against $15,000.
+    expect(chips.filter((c) => c < 500_00)).toEqual([]);
+  });
+
+  it('keeps BOTH intents when they compete for slots', () => {
+    // "fill it" and "all of it" encode what the operator means; round amounts
+    // are only convenience, so they are the ones that give way.
+    const chips = suggestAmounts(10_000_00, 100_00, 400_00);
+    expect(chips).toContain(300_00); // fill it
+    expect(chips).toContain(10_000_00); // all of it
+  });
+
+  it('never offers the same amount twice', () => {
+    // When "fill it" and "all of it" coincide there must be one chip, not two
+    // identical ones sitting side by side.
+    const chips = suggestAmounts(300_00, 100_00, 400_00);
+    expect(new Set(chips).size).toBe(chips.length);
+  });
+
+  it('still reads as a ramp, smallest first', () => {
+    const chips = suggestAmounts(1000_00, 0, null);
+    expect([...chips].sort((a, b) => a - b)).toEqual(chips);
+  });
+});

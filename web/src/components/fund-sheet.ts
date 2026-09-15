@@ -30,6 +30,13 @@ export interface FundSheetOptions {
   availableMinor: number | null;
   onConfirm: (amountMinor: number) => Promise<void>;
   onDismiss: () => void;
+  /**
+   * True when a rejected `onConfirm` means the SERVER refused — as opposed to
+   * the request never completing. Injected rather than imported so this
+   * component stays free of the API client, and so the distinction is
+   * explicit at the call site instead of assumed here.
+   */
+  isRejection?: (err: unknown) => boolean;
 }
 
 export function createFundSheet(opts: FundSheetOptions): HTMLElement {
@@ -128,8 +135,15 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
     confirm.textContent = 'Moving…';
     try {
       await opts.onConfirm(parsed.minor);
-    } catch {
-      message.textContent = "That didn't go through. Nothing moved.";
+    } catch (err) {
+      // "Nothing moved" is a CLAIM, and only one of these two cases supports
+      // it. If the server answered, it answered by refusing, so nothing moved.
+      // If the request simply never came back, the move may well have landed —
+      // saying otherwise would be the app's own numbers lying to the operator,
+      // which is the one thing it exists not to do.
+      message.textContent = opts.isRejection?.(err)
+        ? "That didn't go through. Nothing moved."
+        : "We couldn't confirm that. Check the envelope before trying again.";
       confirm.disabled = false;
       confirm.textContent = 'Move it';
     }

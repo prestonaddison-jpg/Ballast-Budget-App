@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import {
+  UNKNOWN_AMOUNT,
   formatMoney,
   formatMoneyExact,
   fundedFraction,
   type EnvelopeTileModel,
 } from '../../web/src/lib/envelope-math';
+import { presentTile } from '../../web/src/lib/envelope-math';
 import { defaultZoneFor, groupIntoZones } from '../../web/src/lib/zones';
 
 const env = (over: Partial<EnvelopeTileModel>): EnvelopeTileModel => ({
@@ -93,5 +95,37 @@ describe('zone assignment', () => {
 
   it('returns no zones for no envelopes', () => {
     expect(groupIntoZones([])).toEqual([]);
+  });
+});
+
+describe('the tile, when the bank has reported nothing', () => {
+  it('shows an em dash and says why — never "$0"', () => {
+    const view = presentTile(env({ type: 'unallocated', name: 'Unallocated', balanceMinor: null }));
+    expect(view.amountText).toBe(UNKNOWN_AMOUNT);
+    expect(view.amountText).not.toContain('0');
+    expect(view.captionText).toBe('waiting on your bank');
+  });
+
+  it('spells the unknown out for a screen reader', () => {
+    // An em dash is announced as nothing at all, so a blind operator would
+    // hear "Unallocated, Unallocated" and learn less than a sighted one.
+    const view = presentTile(env({ type: 'unallocated', balanceMinor: null }));
+    expect(view.amountLabel).toBe('amount not reported by your bank');
+  });
+
+  it('draws no progress bar it cannot justify', () => {
+    expect(
+      presentTile(env({ balanceMinor: null, targetMinor: 400_00 })).progressPercent,
+    ).toBeNull();
+  });
+
+  it('still renders a genuine zero as a zero', () => {
+    // The whole point is the DISTINCTION. An envelope that really holds
+    // nothing must not be hidden behind the same dash as an unknown one.
+    const view = presentTile(env({ balanceMinor: 0, targetMinor: 400_00 }));
+    expect(view.amountText).toBe('$0');
+    expect(view.amountLabel).toBe('$0.00');
+    expect(view.progressPercent).toBe(0);
+    expect(view.captionText).toBe('0% of $400');
   });
 });

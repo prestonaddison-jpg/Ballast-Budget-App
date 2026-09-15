@@ -209,6 +209,17 @@ SELECT
                END
           FROM source_accounts sa
          WHERE sa.entity_id = e.entity_id
+           -- Defence in depth. An entity belongs to exactly one user, so
+           -- entity_id alone SHOULD be sufficient — but nothing declaratively
+           -- ties source_accounts.user_id to entities.user_id, and this is the
+           -- one subquery that turns another table's rows into spendable cash.
+           -- Note the direction: an over-strict filter here UNDERSTATES cash,
+           -- which is the safe way to be wrong. The named-envelope sums below
+           -- are deliberately NOT filtered this way, because dropping a named
+           -- claim would INFLATE unallocated — wrong in the dangerous
+           -- direction — and their composite FK already pins them to the
+           -- entity.
+           AND sa.user_id = e.user_id
            AND sa.budgetable = 1
            AND sa.closed_at IS NULL
       )

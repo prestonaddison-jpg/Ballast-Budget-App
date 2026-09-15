@@ -149,6 +149,10 @@ function openFundSheet(
     envelope,
     availableMinor,
     onDismiss: () => sheet.remove(),
+    // An ApiError means the Worker replied, and it replied by refusing. Any
+    // other rejection is a request that never came back, whose outcome we do
+    // not know.
+    isRejection: (err) => err instanceof ApiError,
     onConfirm: async (amountMinor) => {
       await envelopeApi.transfer(entityId, {
         fromEnvelopeId: unallocatedId,
@@ -191,7 +195,13 @@ function renderShell(me: MeResponse, money: EnvelopesResponse | null) {
 
   /* --- Hero: "safe to spend" is the honest hero number (§14) ------------ */
   const hero = h('div', 'hero');
-  hero.append(h('div', 'safe-label', 'Safe to spend'));
+  // WHOSE money. Entities never commingle (§3), so an unlabelled hero over a
+  // card listing three LLCs invites the one misreading the whole structure
+  // exists to prevent: reading a single entity's figure as a group total.
+  const heroEntity = me.entities.find((e) => e.id === money?.entityId) ?? me.entities[0];
+  hero.append(
+    h('div', 'safe-label', heroEntity ? `Safe to spend · ${heroEntity.name}` : 'Safe to spend'),
+  );
 
   const figure = h('div', 'safe-figure');
   const sub = h('div', 'safe-sub');
@@ -268,7 +278,8 @@ function renderShell(me: MeResponse, money: EnvelopesResponse | null) {
       id: e.id,
       name: e.name,
       type: e.type,
-      balanceMinor: e.balanceMinor ?? 0,
+      // NOT `?? 0`. An unknown balance stays unknown all the way to the tile.
+      balanceMinor: e.balanceMinor,
       targetMinor: e.targetMinor,
       targetDate: e.targetDate,
       currency: 'USD',
@@ -399,11 +410,19 @@ function renderShell(me: MeResponse, money: EnvelopesResponse | null) {
   scroll.append(hero, body);
 
   /* --- Now-Bar: 4 destinations + the one living status pill ------------- */
+  // The ONE living status. It has to agree with the body: a pill reading
+  // "Nothing needs you" above a notice saying you are $300 over-allocated
+  // teaches the operator that the pill is decoration, and then the pill cannot
+  // do its job on the day something really does need them (§14).
   const pill = reauth
     ? { text: 'Reconnect a bank', status: 'bad' as const }
     : !connected
       ? { text: 'Connect an account', status: 'watch' as const }
-      : { text: 'Nothing needs you', status: 'good' as const };
+      : money && money.overAllocatedMinor > 0
+        ? { text: 'Over-allocated', status: 'watch' as const }
+        : money?.safeToSpendMinor == null && money != null
+          ? { text: 'Waiting on your bank', status: 'watch' as const }
+          : { text: 'Nothing needs you', status: 'good' as const };
 
   const nav = createNowBar({
     active: 'canvas' as NavKey,
