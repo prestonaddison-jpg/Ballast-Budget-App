@@ -269,12 +269,24 @@ export async function createEnvelope(
 /**
  * completeEnvelope (§12): "sweep the remainder to `unallocated` and archive."
  *
- * Two statements, and the ORDER matters. The sweep runs first and is guarded;
- * the archive only applies if the sweep left nothing behind. Archiving first
- * would strand whatever balance remained in an envelope the UI no longer
- * shows — money that exists, is claimed, and is invisible.
+ * ONE BATCH, TWO STATEMENTS, AND BOTH THE ORDER AND THE GUARDS ARE THE CONTRACT.
  *
- * Run as a batch so a failure rolls back both — the only atomic unit D1 offers.
+ * The sweep runs first and moves whatever the envelope holds AT THAT MOMENT:
+ * the amount is a subquery over `envelope_balances`, not a number this function
+ * read a round-trip earlier and hoped was still true. The archive then applies
+ * only if the envelope is now at exactly zero.
+ *
+ * Archiving first, or archiving unconditionally, strands money. Concretely: the
+ * operator taps Complete while a fund request for the same envelope is already
+ * in flight. Read-then-write would sweep the balance it read, the fund would
+ * land, and the archive would then hide an envelope that still holds cash —
+ * money that exists, is claimed by a named envelope, and that no screen shows.
+ * The residual would go on counting it as spoken for, so the operator's safe-to-
+ * spend would be quietly low forever with nothing on the Canvas to explain it.
+ *
+ * `db.batch()` is the only atomic unit D1 offers — there are no interactive
+ * transactions — and statements within one see each other's writes, which is
+ * exactly what lets the archive test the balance the sweep just zeroed.
  */
 export async function completeEnvelope(
   db: D1Database,
@@ -296,31 +308,57 @@ export async function completeEnvelope(
     throw new MoneyError('not_completable', 'Unallocated cannot be completed.');
   }
 
-  const remainder = envelope.balance_minor ?? 0;
+  const entryId = randomId();
+  // ?2 is the envelope being completed in BOTH statements, so one fragment
+  // serves both and the two can never drift apart.
+  const balance = '(SELECT b.balance_minor FROM envelope_balances b WHERE b.envelope_id = ?2)';
 
-  if (remainder > 0) {
-    const swept = await transfer(db, {
-      userId: input.userId,
-      entityId: input.entityId,
-      fromEnvelopeId: input.envelopeId,
-      toEnvelopeId: input.unallocatedId,
-      amountMinor: remainder,
-      kind: 'sweep',
-      memo: `Completed: ${envelope.name}`,
-      now: input.now,
-    });
-    // If the sweep failed the balance moved under us. Leave the envelope open
-    // rather than archiving money into invisibility.
-    if (!swept.ok) return { ok: false, sweptMinor: 0 };
+  const [swept, archived] = await db.batch<{ amount_minor: number }>([
+    db
+      .prepare(
+        `INSERT INTO ledger_entries
+           (id, user_id, entity_id, from_envelope_id, to_envelope_id,
+            amount_minor, kind, memo, created_at)
+         SELECT ?1, ?3, ?4, ?2, ?5, ${balance}, 'sweep', ?6, ?7
+          WHERE ${balance} > 0
+            AND EXISTS (SELECT 1 FROM envelopes s
+                         WHERE s.id = ?2 AND s.user_id = ?3 AND s.entity_id = ?4
+                           AND s.archived_at IS NULL)
+            AND EXISTS (SELECT 1 FROM envelopes d
+                         WHERE d.id = ?5 AND d.user_id = ?3 AND d.entity_id = ?4
+                           AND d.archived_at IS NULL)
+         RETURNING amount_minor`,
+      )
+      .bind(
+        entryId,
+        input.envelopeId,
+        input.userId,
+        input.entityId,
+        input.unallocatedId,
+        `Completed: ${envelope.name}`,
+        input.now,
+      ),
+    db
+      .prepare(
+        `UPDATE envelopes
+            SET completed_at = COALESCE(completed_at, ?1),
+                archived_at = ?1,
+                updated_at = ?1
+          WHERE id = ?2 AND user_id = ?3
+            -- Only archive an envelope that is genuinely empty. If the sweep
+            -- above was blocked, this is false and the envelope stays visible.
+            AND ${balance} = 0`,
+      )
+      // COALESCE keeps the first completion's timestamp, so a retried request
+      // after a dropped response is a no-op rather than a rewritten history.
+      .bind(input.now, input.envelopeId, input.userId),
+  ]);
+
+  if ((archived.meta.changes ?? 0) === 0) {
+    // The envelope is not empty and was not archived. Nothing was hidden; the
+    // caller can show it again and the operator can retry.
+    return { ok: false, sweptMinor: 0 };
   }
 
-  await db
-    .prepare(
-      `UPDATE envelopes SET completed_at = ?1, archived_at = ?1, updated_at = ?1
-        WHERE id = ?2 AND user_id = ?3`,
-    )
-    .bind(input.now, input.envelopeId, input.userId)
-    .run();
-
-  return { ok: true, sweptMinor: Math.max(0, remainder) };
+  return { ok: true, sweptMinor: swept.results?.[0]?.amount_minor ?? 0 };
 }
