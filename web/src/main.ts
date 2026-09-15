@@ -19,7 +19,11 @@ import {
   readPreference,
   type ThemePreference,
 } from './lib/theme';
-import { api, ApiError, type MeResponse } from './lib/api';
+import { api, envelopeApi, ApiError, type EnvelopesResponse, type MeResponse } from './lib/api';
+import { createZoneGrid } from './components/zone-grid';
+import { groupIntoZones } from './lib/zones';
+import { createFundSheet } from './components/fund-sheet';
+import { formatMoney, type EnvelopeTileModel } from './lib/envelope-math';
 import { createGauge } from './components/gauge';
 import { createFocalAlert } from './components/focal-alert';
 import { createFreshness, computeFreshness } from './components/freshness';
@@ -129,7 +133,51 @@ function renderLogin(onSuccess: () => void) {
  * Signed-in shell
  * ---------------------------------------------------------------------- */
 
-function renderShell(me: MeResponse) {
+function openFundSheet(
+  entityId: string,
+  unallocatedId: string,
+  envelope: EnvelopeTileModel,
+  availableMinor: number | null,
+  me: MeResponse,
+) {
+  // A key per ATTEMPT, so a retry after a dropped response cannot allocate a
+  // second time. Generated here rather than in the API client because the
+  // client cannot tell a retry from a deliberate second transfer.
+  const idempotencyKey = crypto.randomUUID();
+
+  const sheet = createFundSheet({
+    envelope,
+    availableMinor,
+    onDismiss: () => sheet.remove(),
+    onConfirm: async (amountMinor) => {
+      await envelopeApi.transfer(entityId, {
+        fromEnvelopeId: unallocatedId,
+        toEnvelopeId: envelope.id,
+        amountMinor,
+        idempotencyKey,
+      });
+      sheet.remove();
+      const money = await loadMoney(me);
+      renderShell(me, money);
+    },
+  });
+  document.body.append(sheet);
+}
+
+/** Loads the money model for the first entity, or null if there is none. */
+async function loadMoney(me: MeResponse): Promise<EnvelopesResponse | null> {
+  const entity = me.entities[0];
+  if (!entity) return null;
+  try {
+    return await envelopeApi.list(entity.id);
+  } catch {
+    // A failed money load must not blank the whole shell: the connection
+    // state and the Needs You alert are still worth showing.
+    return null;
+  }
+}
+
+function renderShell(me: MeResponse, money: EnvelopesResponse | null) {
   clear(app);
 
   const connected = me.connections.length > 0;
@@ -141,20 +189,30 @@ function renderShell(me: MeResponse) {
   const scroll = h('div', 'scroll');
   const body = h('div', 'body');
 
-  /* --- Hero: the runway gauge + "safe to spend" (A.4 substitution) ------ */
+  /* --- Hero: "safe to spend" is the honest hero number (§14) ------------ */
   const hero = h('div', 'hero');
+  hero.append(h('div', 'safe-label', 'Safe to spend'));
 
-  if (connected) {
-    // Slice 3 computes real runway. Phase 0 has no ledger, so the gauge is
-    // not rendered with invented numbers — the empty state is shown instead.
-    hero.append(h('div', 'safe-label', 'Safe to spend'));
-    hero.append(h('div', 'safe-figure', '—'));
-    hero.append(h('div', 'safe-sub', 'Available once the money model lands (Slice 1).'));
+  const figure = h('div', 'safe-figure');
+  const sub = h('div', 'safe-sub');
+
+  if (!connected) {
+    figure.textContent = '—';
+    sub.textContent = 'Connect an account to see real figures.';
+  } else if (money == null) {
+    figure.textContent = '—';
+    sub.textContent = 'Loading…';
+  } else if (money.safeToSpendMinor == null) {
+    // The "green but dead" rule applied to the hero. If the bank has not said
+    // what is available, the honest answer is that we do not know — NEVER a
+    // confident figure computed from stale cash.
+    figure.textContent = '—';
+    sub.textContent = "Your bank hasn't reported an available balance.";
   } else {
-    hero.append(h('div', 'safe-label', 'Safe to spend'));
-    hero.append(h('div', 'safe-figure', '—'));
-    hero.append(h('div', 'safe-sub', 'Connect an account to see real figures.'));
+    figure.textContent = formatMoney(money.safeToSpendMinor);
+    sub.textContent = 'Everything else already has a job.';
   }
+  hero.append(figure, sub);
 
   if (worst) {
     hero.append(
@@ -185,6 +243,47 @@ function renderShell(me: MeResponse) {
         detail: 'Ballast reads balances and transactions. It never moves money.',
         action: 'Connect',
         tone: 'watch',
+      }),
+    );
+  }
+
+  /* --- Over-allocation, stated plainly ---------------------------------- */
+  if (money && money.overAllocatedMinor > 0) {
+    const notice = h('div', 'over-allocated');
+    notice.append(
+      document.createTextNode('Allocations are '),
+      Object.assign(document.createElement('strong'), {
+        textContent: formatMoney(money.overAllocatedMinor),
+      }),
+      document.createTextNode(
+        ' above the cash actually available. Nothing is wrong with your envelopes — the bank balance moved. Free some up when you can.',
+      ),
+    );
+    body.append(notice);
+  }
+
+  /* --- The Canvas: envelope tiles in a zone grid (§13) ------------------- */
+  if (money && money.envelopes.length > 0) {
+    const tiles: EnvelopeTileModel[] = money.envelopes.map((e) => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      balanceMinor: e.balanceMinor ?? 0,
+      targetMinor: e.targetMinor,
+      targetDate: e.targetDate,
+      currency: 'USD',
+    }));
+
+    const unallocated = money.envelopes.find((e) => e.type === 'unallocated');
+
+    body.append(
+      createZoneGrid({
+        zones: groupIntoZones(tiles),
+        onSelect: (envelope) => {
+          // Tapping unallocated is not a fund action — it IS the source.
+          if (envelope.type === 'unallocated' || !unallocated) return;
+          openFundSheet(money.entityId, unallocated.id, envelope, money.safeToSpendMinor, me);
+        },
       }),
     );
   }
@@ -285,7 +384,7 @@ function renderShell(me: MeResponse) {
       'background:transparent;color:var(--ink)';
     b.addEventListener('click', () => {
       applyTheme(opt.value);
-      renderShell(me);
+      renderShell(me, money);
     });
     group.append(b);
   }
@@ -336,7 +435,8 @@ async function boot() {
 
   try {
     const me = await api.me();
-    renderShell(me);
+    const money = await loadMoney(me);
+    renderShell(me, money);
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {
       renderLogin(() => void boot());

@@ -87,3 +87,67 @@ export const api = {
     }),
   logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
 };
+
+/* -------------------------------------------------------------------------
+ * Envelopes (Slice 1)
+ * ---------------------------------------------------------------------- */
+
+export interface ApiEnvelope {
+  id: string;
+  name: string;
+  type: 'unallocated' | 'buffer' | 'tax' | 'spend' | 'save';
+  /** NULL when the bank has not reported an available balance. */
+  balanceMinor: number | null;
+  targetMinor: number | null;
+  targetDate: string | null;
+  zone: string | null;
+}
+
+export interface EnvelopesResponse {
+  entityId: string;
+  envelopes: ApiEnvelope[];
+  /** NULL means "we don't know", never a confident zero. */
+  safeToSpendMinor: number | null;
+  /** Positive when allocations exceed the cash actually available. */
+  overAllocatedMinor: number;
+  invariant: 'balanced' | 'cash_ahead' | 'envelopes_ahead' | 'indeterminate';
+}
+
+export const envelopeApi = {
+  list: (entityId: string) =>
+    request<EnvelopesResponse>(`/api/entities/${encodeURIComponent(entityId)}/envelopes`),
+
+  create: (
+    entityId: string,
+    body: { name: string; type: ApiEnvelope['type']; targetMinor?: number | null },
+  ) =>
+    request<{ id: string }>(`/api/entities/${encodeURIComponent(entityId)}/envelopes`, {
+      method: 'POST',
+      body: JSON.stringify(body),
+    }),
+
+  /**
+   * Tap-to-fund. `idempotencyKey` is generated per ATTEMPT, not per retry, so
+   * a dropped response that the client retries cannot allocate twice.
+   */
+  transfer: (
+    entityId: string,
+    body: {
+      fromEnvelopeId: string;
+      toEnvelopeId: string;
+      amountMinor: number;
+      memo?: string;
+      idempotencyKey?: string;
+    },
+  ) =>
+    request<{ entryId?: string; duplicate?: boolean }>(
+      `/api/entities/${encodeURIComponent(entityId)}/transfers`,
+      { method: 'POST', body: JSON.stringify(body) },
+    ),
+
+  complete: (entityId: string, envelopeId: string) =>
+    request<{ sweptMinor: number }>(
+      `/api/entities/${encodeURIComponent(entityId)}/envelopes/${encodeURIComponent(envelopeId)}/complete`,
+      { method: 'POST' },
+    ),
+};
