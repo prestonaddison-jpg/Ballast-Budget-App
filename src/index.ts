@@ -20,6 +20,7 @@ import { assertEnv, isLocalDev } from './env';
 import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
+import { envelopeRoutes } from './routes/envelopes';
 import { webhookRoutes } from './routes/webhook';
 import { csrfGuard, type AppVariables } from './http/middleware';
 import { error, notFound } from './http/responses';
@@ -74,6 +75,7 @@ app.use('/api/*', csrfGuard);
 app.route('/api/health', healthRoutes);
 app.route('/api/auth', authRoutes);
 app.route('/api/me', meRoutes);
+app.route('/api/entities', envelopeRoutes);
 
 app.notFound((c) => notFound({ secure: !isLocalDev(c.env) }));
 

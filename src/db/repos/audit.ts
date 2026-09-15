@@ -13,6 +13,8 @@ export type AuditAction =
   | 'login.failure'
   | 'logout'
   | 'session.revoked'
+  | 'envelope.transfer'
+  | 'envelope.completed'
   | 'item.linked'
   | 'item.reauth_required'
   | 'item.removed'
