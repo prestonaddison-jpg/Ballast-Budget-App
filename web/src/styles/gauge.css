@@ -1,0 +1,48 @@
+/* ============================================================================
+ * Gauge done right (A.5) — the signature element.
+ * Navy/gold is spent HERE and on the Now-Bar pill. Nowhere else.
+ * ========================================================================== */
+.gauge { position: relative; width: min(268px, 74vw); aspect-ratio: 200/182; }
+.gauge-svg { width: 100%; height: 100%; display: block; overflow: visible; }
+
+.g-track { stroke: rgba(244, 246, 250, .16); }
+.g-fill  { stroke: var(--sig-accent); }
+.g-target { stroke: var(--sig-ink); }
+
+/* Qualitative bands keep their constant status meaning across both themes. */
+.g-band-good  { stroke: var(--good); }
+.g-band-watch { stroke: var(--watch); }
+.g-band-bad   { stroke: var(--bad); }
+
+/* On a light page (a gauge used outside the navy hero) the track flips. */
+.gauge:not(.on-sig) .g-track { stroke: var(--track); }
+.gauge:not(.on-sig) .g-fill { stroke: var(--accent); }
+.gauge:not(.on-sig) .g-target { stroke: var(--ink); }
+
+.gauge-centre {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 2px; text-align: center; pointer-events: none;
+  padding-bottom: 8%;
+}
+.gauge-figure {
+  font-family: var(--display), system-ui, sans-serif;
+  font-weight: 700; font-size: 2.5rem; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; line-height: 1;
+}
+.gauge-label {
+  font-size: .72rem; letter-spacing: .09em; text-transform: uppercase;
+  font-weight: 600; opacity: .76;
+}
+.gauge-sub { font-size: .74rem; opacity: .64; }
+
+/* The band, stated in words. Never color alone (A.8). */
+.gauge-tone {
+  position: absolute; left: 50%; bottom: 2%; transform: translateX(-50%);
+  font-size: .7rem; letter-spacing: .08em; text-transform: uppercase;
+  font-weight: 700; padding: 3px 10px; border-radius: 99px;
+  border: 1px solid currentColor;
+}
+.gauge-tone[data-tone="good"]  { color: var(--good); }
+.gauge-tone[data-tone="watch"] { color: var(--watch); }
+.gauge-tone[data-tone="bad"]   { color: var(--bad); }

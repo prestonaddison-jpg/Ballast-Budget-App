@@ -1,0 +1,104 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "ballast",
+  "main": "./src/index.ts",
+
+  // >= 2026-08-04 enables nodejs_compat / nodejs_compat_v2 by DEFAULT, so the
+  // flags are deliberately absent rather than forgotten. Ballast does not rely
+  // on Node built-ins: all crypto is Web Crypto (§16).
+  //
+  // PINNED to the newest date the bundled workerd actually supports. Setting a
+  // date ahead of the runtime binary makes workerd refuse to start with
+  // "requires compatibility date X, but the newest date supported by this
+  // server binary is Y" — which breaks `vitest` and `wrangler dev` before a
+  // single line of app code runs. Raise this only together with wrangler.
+  "compatibility_date": "2026-08-22",
+  "compatibility_flags": [],
+  "observability": { "enabled": true },
+
+  // ---------------------------------------------------------------------
+  // Static assets — the PWA shell.
+  //
+  // ARCHITECTURE NOTE (deviation from blueprint §15, deliberate):
+  // The blueprint specifies "Cloudflare Pages + Worker". This ships as a
+  // SINGLE Worker with static assets instead, because:
+  //   1. Cloudflare now banners "Start new projects with Workers" across the
+  //      Pages docs; Pages is not receiving new features.
+  //   2. Pages Functions cannot host queue consumers or cron triggers, both of
+  //      which Ballast needs (§15 lists Queues + Cron in the stack).
+  //   3. One origin means the session cookie is same-origin by construction —
+  //      no CORS, no cross-origin cookie rules, and SameSite=Strict stays
+  //      viable. Splitting the PWA and the API across origins would force
+  //      SameSite=None, which is exactly the posture a finance app should not
+  //      adopt.
+  // Everything else in §15 is unchanged.
+  // ---------------------------------------------------------------------
+  "assets": {
+    "directory": "./dist/client/",
+    "binding": "ASSETS",
+    // Defaults to "none", which would 404 every deep link in the SPA.
+    "not_found_handling": "single-page-application",
+    // Assets are served BEFORE the Worker by default, so without this any
+    // /api/* path colliding with a built file would be served as a static
+    // file and the API would never run. Patterns MUST start with "/".
+    "run_worker_first": ["/api/*"]
+  },
+
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "ballast-db",
+      "database_id": "PLACEHOLDER_SET_BY_WRANGLER_D1_CREATE",
+      "migrations_dir": "migrations"
+    }
+  ],
+
+  // KV holds ONLY non-request, non-authoritative data: Plaid webhook signing
+  // keys (public) and rate-limit counters. Balances and ledger state live in
+  // D1 — KV is eventually consistent and must never be a source of truth.
+  "kv_namespaces": [
+    { "binding": "CACHE", "id": "PLACEHOLDER_SET_BY_WRANGLER_KV_CREATE" }
+  ],
+
+  // Receipts (Slice 5). Highest-sensitivity tier (§16).
+  "r2_buckets": [
+    { "binding": "RECEIPTS", "bucket_name": "ballast-receipts" }
+  ],
+
+  "queues": {
+    "producers": [
+      { "binding": "SYNC_QUEUE", "queue": "ballast-sync" }
+    ],
+    "consumers": [
+      {
+        "queue": "ballast-sync",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "max_concurrency": 5,
+        "retry_delay": 30,
+        // Without a DLQ, messages that exhaust max_retries are SILENTLY
+        // DISCARDED. For a financial sync pipeline that is data loss.
+        "dead_letter_queue": "ballast-sync-dlq"
+      }
+    ]
+  },
+
+  // Sync sweep. Webhooks are the real-time signal; cron is the safety net for
+  // a webhook that never arrived (§15).
+  "triggers": { "crons": ["0 */6 * * *"] },
+
+  "vars": {
+    "PLAID_ENV": "sandbox",
+    "APP_ORIGIN": "http://localhost:8787"
+  }
+
+  // Secrets (via `wrangler secret put`, never in this file):
+  //   PLAID_CLIENT_ID
+  //   PLAID_SECRET
+  //   FIELD_ENCRYPTION_KEY   (32 bytes, base64url — see scripts/gen-key.mjs)
+  //
+  // `secrets.required` is deliberately NOT set: enabling it stops
+  // `wrangler types` from inferring names from .dev.vars, and Env is declared
+  // by hand in src/env.ts anyway.
+}

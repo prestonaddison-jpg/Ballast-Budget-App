@@ -1,0 +1,192 @@
+/* ============================================================================
+ * Ballast · App layer
+ * Everything here is Ballast-specific composition ON TOP of the shared
+ * component layer. The shared layer (components.css) stays diffable against
+ * the Alongside source system; app-specific rules live here.
+ * ========================================================================== */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0; height: 100%;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: var(--body), system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--bgfade);
+  color: var(--ink);
+  overscroll-behavior-y: none; /* no rubber-band on a standalone PWA */
+}
+
+/* App frame ---------------------------------------------------------------
+ * Safe-area insets are mandatory in standalone iOS: without viewport-fit=cover
+ * + env() padding the Now-Bar sits under the home indicator. */
+.screen {
+  min-height: 100svh;
+  padding-top: env(safe-area-inset-top, 0px);
+}
+
+.scroll {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px));
+}
+
+.body { display: flex; flex-direction: column; gap: 14px; padding-block: 14px; }
+
+/* Typography --------------------------------------------------------------- */
+h1, h2, h3 { font-family: var(--display), system-ui, sans-serif; margin: 0; letter-spacing: -.02em; }
+.label {
+  font-size: .75rem; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--soft); font-weight: 600;
+}
+.num, .money { font-family: var(--data), ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+.soft { color: var(--soft); }
+
+/* --- HERO (Ballast substitution for .feed) --------------------------------
+ * "The hero slot holds the runway gauge + safe to spend, not media." (A.4)
+ * Per A.6 a single big number is NOT carded — it breathes on the background.
+ * The signature navy/gold lives here and in the nav pill. Nowhere else. */
+.hero {
+  position: relative;
+  background:
+    radial-gradient(120% 78% at 50% -18%, rgba(201, 162, 39, .16), transparent 62%),
+    var(--sig-ground);
+  color: var(--sig-ink);
+  padding: 22px 20px 26px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+}
+.hero::after { /* fade the hero into the page, mirroring .feed .fade */
+  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 22%;
+  background: linear-gradient(180deg, transparent, var(--bgfade));
+  pointer-events: none;
+}
+.hero .safe-label {
+  font-size: .75rem; letter-spacing: .08em; text-transform: uppercase;
+  color: rgba(244, 246, 250, .72); font-weight: 600;
+}
+.hero .safe-figure {
+  font-family: var(--display), system-ui, sans-serif;
+  font-weight: 700; font-size: 2.9rem; letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums; line-height: 1.05;
+}
+.hero .safe-sub { font-size: .85rem; color: rgba(244, 246, 250, .74); }
+
+/* --- Freshness indicator (A.5) --------------------------------------------
+ * The "green but dead" rule: stale / disconnected is ITS OWN STATE, never
+ * folded into a balance color. Meaning is never carried by color alone —
+ * every state pairs a dot with text (A.8). */
+.freshness {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: .78rem; color: var(--soft);
+  min-height: var(--tap);
+}
+.freshness .dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--good);
+}
+.freshness[data-state="stale"] .dot { background: var(--watch); }
+.freshness[data-state="disconnected"] .dot { background: var(--bad); }
+.freshness[data-state="syncing"] .dot { background: var(--accent); }
+/* disconnected is structurally distinct, not just a different hue */
+.freshness[data-state="disconnected"] {
+  color: var(--bad); font-weight: 600;
+}
+.freshness[data-state="disconnected"] .dot {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 22%, transparent);
+}
+.hero .freshness { color: rgba(244, 246, 250, .74); }
+
+/* --- Focal alert extras ---------------------------------------------------- */
+.needs .d { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); flex: none; }
+.needs .txt { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.needs .txt strong { font-weight: 650; font-size: .95rem; }
+.needs .txt span { font-size: .82rem; color: var(--soft); }
+.needs .go {
+  min-height: var(--tap); min-width: var(--tap);
+  display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: 0; cursor: pointer; font: inherit;
+  font-weight: 700; color: var(--accent); padding-inline: 4px;
+}
+
+/* --- Progressive-disclosure collapsible (A.5) ------------------------------
+ * One reusable section, secondary detail folded by default, <=2 levels deep. */
+.disclose { border-top: 1px solid var(--cardln); }
+.disclose > summary {
+  list-style: none; cursor: pointer;
+  min-height: var(--tap); display: flex; align-items: center; gap: 10px;
+  font-weight: 600; font-size: .9rem;
+}
+.disclose > summary::-webkit-details-marker { display: none; }
+.disclose > summary::after {
+  content: ""; margin-left: auto; width: 8px; height: 8px;
+  border-right: 2px solid var(--soft); border-bottom: 2px solid var(--soft);
+  transform: rotate(45deg); transition: transform var(--t-ui) var(--ease-out);
+}
+.disclose[open] > summary::after { transform: rotate(225deg); }
+.disclose .disclose-body { padding-bottom: 14px; color: var(--soft); font-size: .88rem; }
+
+/* --- Now-Bar (A.5) --------------------------------------------------------
+ * 4 destinations + one living center status pill (the single most urgent
+ * thing). On desktop it becomes a left rail + a top "needs attention" banner. */
+.nowbar {
+  padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  position: sticky; bottom: 0;
+}
+.nowbar .nb {
+  flex: 1; min-width: var(--tap); min-height: var(--tap);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 3px; background: none; border: 0; cursor: pointer;
+  color: var(--soft); font: inherit; font-size: .68rem; padding: 4px;
+}
+.nowbar .nb .ico { width: 20px; height: 20px; }
+.nowbar .nb[aria-current="page"] { color: var(--accent); }
+.nowbar .pill {
+  /* the signature element: navy ground + gold, matching the hero gauge */
+  background: var(--sig-ground);
+  color: var(--sig-ink);
+  border: 1px solid color-mix(in srgb, var(--sig-accent) 42%, transparent);
+  min-height: var(--tap);
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; font: inherit; font-size: .8rem; font-weight: 650;
+}
+.nowbar .pill .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.nowbar .pill[data-status="good"] .dot { background: var(--good); }
+.nowbar .pill[data-status="watch"] .dot { background: var(--watch); }
+.nowbar .pill[data-status="bad"] .dot { background: var(--bad); }
+
+/* --- Responsive: phone Now-Bar -> desktop left rail (A.8) ------------------ */
+@media (min-width: 860px) {
+  .screen {
+    display: grid;
+    grid-template-columns: 232px 1fr;
+    grid-template-areas: "rail main";
+    max-width: 1180px; margin-inline: auto;
+  }
+  .scroll { grid-area: main; }
+  .nowbar {
+    grid-area: rail; position: sticky; top: 0; align-self: start;
+    flex-direction: column; align-items: stretch; height: 100svh;
+    margin-top: 0;
+    /* Safe-area insets are applied UNCONDITIONALLY, never behind a
+       mobile-only media query: iPad viewports are >= 768px, so a
+       max-width-gated rule never matches there and the rail renders under
+       the Apple status bar. This is the most common safe-area bug. */
+    padding: calc(22px + env(safe-area-inset-top, 0px)) 16px
+             calc(22px + env(safe-area-inset-bottom, 0px));
+    /* iOS 26 tints the chrome from a viewport-edge sticky element's
+       background, so the rail carries a real color rather than `none`. */
+    background: var(--bgfade); border-right: 1px solid var(--cardln);
+  }
+  .nowbar .nb { flex: none; flex-direction: row; justify-content: flex-start; gap: 12px; font-size: .9rem; }
+  .nowbar .pill { order: -1; margin-bottom: 18px; }
+  .hero { border-radius: var(--r-card); margin-top: 16px; }
+}
+
+/* --- Utility --------------------------------------------------------------- */
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

@@ -1,0 +1,40 @@
+{
+  "name": "ballast",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Read-only, Plaid-connected, multi-entity business cash-allocation PWA.",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:web": "vite dev --config web/vite.config.ts",
+    "build": "npm run build:web",
+    "build:web": "vite build --config web/vite.config.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate:local": "wrangler d1 migrations apply ballast-db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply ballast-db --remote",
+    "gen:key": "node scripts/gen-key.mjs",
+    "spike:plaid": "node spikes/plaid-sandbox/run.mjs",
+    "spike:coverage": "node spikes/bank-coverage/run.mjs",
+    "deploy": "npm run build && wrangler deploy"
+  },
+  "dependencies": {
+    "hono": "^4.13.8"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.22.0",
+    "@cloudflare/workers-types": "^5.20260915.1",
+    "@types/node": "^26.5.1",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3",
+    "vite": "^7.3.6",
+    "vitest": "~4.1.11",
+    "wrangler": "^4.131.2"
+  }
+}

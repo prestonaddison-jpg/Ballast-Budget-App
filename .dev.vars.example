@@ -1,0 +1,19 @@
+# Local development secrets. Copy to `.dev.vars` (gitignored) and fill in.
+#
+#   cp .dev.vars.example .dev.vars
+#
+# `wrangler dev` reads .dev.vars automatically. In production these are set
+# with `wrangler secret put <NAME>` and never appear in wrangler.jsonc.
+#
+# NOTE: use EITHER .dev.vars OR .env, never both — if .dev.vars exists,
+# wrangler excludes .env values from `env` entirely.
+
+# Plaid dashboard -> Team Settings -> Keys.
+# Use the SANDBOX secret while PLAID_ENV=sandbox.
+PLAID_CLIENT_ID=""
+PLAID_SECRET=""
+
+# 32 bytes, base64url. Generate with: npm run gen:key
+# Rotating this makes every stored Plaid access token undecryptable; the
+# recovery path is re-linking each institution.
+FIELD_ENCRYPTION_KEY=""

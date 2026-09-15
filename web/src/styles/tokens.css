@@ -1,0 +1,107 @@
+/* ============================================================================
+ * Ballast · Theme tokens
+ * Alongside shared design system — token contract (Blueprint A.1)
+ * with the Atelier (light) / Graphite (dark) blocks (Blueprint A.4).
+ *
+ * Themes are token sets over ONE shared component layer. A theme swap is
+ * ~15 CSS variables, not a rebuild. Never add a component that hardcodes a
+ * color: every value below is referenced through var(--token).
+ *
+ * TOKEN CONTRACT (A.1)
+ *   --bg        Page background (gradient or solid)
+ *   --bgfade    Solid bottom color of --bg; fades media into page / behind nav
+ *   --ink       Primary text          --soft     Secondary text
+ *   --metaink   Text over media (always light)
+ *   --accent    Brand accent          --accent2  Gradient partner
+ *   --good --watch --bad   Status. MEANING IS CONSTANT ACROSS THEMES.
+ *   --rule --ruleV         Horizontal / vertical hairline
+ *   --track     Empty portion of a meter
+ *   --card --cardln        Card surface / card hairline border
+ *   --display --body --data  Display font / body font / mono-numeric font
+ * ========================================================================== */
+
+/* --- 8 · Atelier — LIGHT (default) --------------------------------------
+ * Editorial-minimal: cool paper, deep ink, one accent, generous whitespace;
+ * cards are a 1px border, no glass. Deliberately not cream-serif-terracotta.
+ */
+[data-theme="atelier"] {
+  --bg: #f3f4f2;
+  --bgfade: #f3f4f2;
+  --ink: #181a17;
+  --soft: #676b64;
+  --metaink: #ffffff;
+  --accent: #2f57d6;
+  --accent2: #5b79e6;
+  --good: #1f8a5a;
+  --watch: #c08a1e;
+  --bad: #c0492f;
+  --rule: linear-gradient(90deg, transparent, rgba(24, 26, 23, .14), transparent);
+  --ruleV: linear-gradient(180deg, transparent, rgba(24, 26, 23, .14), transparent);
+  --track: rgba(24, 26, 23, .1);
+  --card: #ffffff;
+  --cardln: rgba(24, 26, 23, .1);
+  --display: "Bricolage Grotesque";
+  --body: "Hanken Grotesk";
+  --data: "Space Mono";
+}
+
+/* --- 9 · Graphite — DARK -------------------------------------------------
+ * A refined neutral instrument: charcoal, warm-neutral text, one steel-blue
+ * accent. Precision and contrast, no glow. Deliberately not near-black+acid.
+ */
+[data-theme="graphite"] {
+  --bg: linear-gradient(180deg, #16181a, #121416);
+  --bgfade: #121416;
+  --ink: #eceeec;
+  --soft: #9aa09a;
+  --metaink: #ffffff;
+  --accent: #4f9fd0;
+  --accent2: #6fb6e0;
+  --good: #5bbf8a;
+  --watch: #d8a23a;
+  --bad: #d4634f;
+  --rule: linear-gradient(90deg, transparent, rgba(180, 190, 190, .18), transparent);
+  --ruleV: linear-gradient(180deg, transparent, rgba(180, 190, 190, .18), transparent);
+  --track: rgba(180, 190, 190, .13);
+  --card: rgba(255, 255, 255, .03);
+  --cardln: rgba(255, 255, 255, .1);
+  --display: "Bricolage Grotesque";
+  --body: "Hanken Grotesk";
+  --data: "Space Mono";
+}
+
+/* --- Praeclarus signature override (both themes) -------------------------
+ * "Spend the one bold move on navy #101b2d + gold." (Blueprint A.4)
+ * Scope: the runway gauge and the active nav / brand pill. NOTHING ELSE.
+ * Do not scatter navy/gold across the UI — that is the whole point of the
+ * "one signature element" rule (A.7 Aesthetic-usability).
+ */
+:root {
+  --pv-navy: #101b2d;
+  --pv-gold: #c9a227;
+  --pv-gold-soft: #e3c565;
+
+  /* Motion — Doherty: interactions < 400ms; gauge sweep 500-600ms (A.5) */
+  --t-fast: 160ms;
+  --t-ui: 280ms;
+  --t-gauge: 560ms;
+  --ease-out: cubic-bezier(.22, .78, .3, 1);
+
+  /* Geometry */
+  --r-card: 18px;
+  --tap: 44px; /* Fitts's: minimum touch target (A.7 / A.8) */
+}
+
+/* Signature surfaces. Navy reads as a deep ground in BOTH poles; gold is the
+ * accent that sits on it. Kept here so the signature survives a theme swap. */
+[data-theme="atelier"] {
+  --sig-ground: var(--pv-navy);
+  --sig-ink: #f4f6fa;
+  --sig-accent: var(--pv-gold);
+}
+
+[data-theme="graphite"] {
+  --sig-ground: #0c1523;
+  --sig-ink: #f4f6fa;
+  --sig-accent: var(--pv-gold-soft);
+}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Ballast">
+  <title>Ballast — Praeclarus Ventures</title>
+  <rect width="512" height="512" fill="#101b2d"/>
+  <!-- PV monogram: the P bowl and the V stroke share a stem, so the mark reads
+       as one letterform at 48px rather than two crowded glyphs. -->
+  <g fill="none" stroke="#c9a227" stroke-width="30" stroke-linecap="square" stroke-linejoin="miter">
+    <!-- P stem -->
+    <path d="M150 128 V 384"/>
+    <!-- P bowl -->
+    <path d="M150 128 H 236 a 58 58 0 0 1 0 116 H 150"/>
+    <!-- V -->
+    <path d="M268 268 L 318 384 L 368 268"/>
+  </g>
+</svg>

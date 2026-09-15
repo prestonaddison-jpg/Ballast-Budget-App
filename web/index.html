@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en" data-theme="atelier">
+<head>
+  <meta charset="utf-8" />
+  <!-- viewport-fit=cover is REQUIRED for env(safe-area-inset-*) to resolve in
+       standalone iOS. Without it the Now-Bar sits under the home indicator. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <!-- Kept for Android/Chromium. NOTE: Safari 26 / iOS 26 IGNORES this tag and
+       derives the status-bar tint at first paint from the background-color of
+       a fixed/sticky element at the viewport edge, falling back to body's
+       background-color. That is why ballast.css sets an explicit
+       `body { background }` and gives .nowbar its own background — on iOS
+       those, not this meta, are what tint the chrome. JS changes after first
+       paint do not update it. -->
+  <meta name="theme-color" content="#f3f4f2" />
+  <meta name="color-scheme" content="light dark" />
+  <meta name="description" content="Ballast — honest business cash allocation." />
+
+  <title>Ballast</title>
+
+  <!-- iOS home-screen install. Ballast is iOS-only, installed to the Home
+       Screen; the session is the real access boundary (§1). -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Ballast" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <!-- REQUIRED on iOS: iOS does NOT read the manifest `icons` array for the
+       Home Screen icon. Ship this or the user gets a screenshot of the page.
+       purpose:"maskable" is ignored on iOS, hence a separate full-bleed
+       180x180 here and a maskable 512 in the manifest for Android. -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+
+  <!-- Never index; this is a single-operator internal tool. -->
+  <meta name="robots" content="noindex, nofollow" />
+
+  <!-- Fonts are self-hosted at build time rather than pulled from a CDN: a
+       third-party font request on a financial app leaks usage metadata and
+       adds a render-blocking dependency the CSP would have to widen for. The
+       stacks below degrade to system fonts until the faces land. -->
+  <link rel="stylesheet" href="/src/styles/index.css" />
+</head>
+<body>
+  <div id="app" class="screen">
+    <noscript>
+      <p style="padding:20px">Ballast needs JavaScript to show your accounts.</p>
+    </noscript>
+  </div>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
