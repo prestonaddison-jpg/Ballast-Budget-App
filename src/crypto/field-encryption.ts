@@ -95,8 +95,19 @@ export async function decryptField(key: CryptoKey, envelope: string, aad: string
   if (parts.length !== 3 || parts[0] !== VERSION) {
     throw new FieldCryptoError('Unrecognised ciphertext envelope');
   }
-  const iv = base64UrlToBytes(parts[1]);
-  const ct = base64UrlToBytes(parts[2]);
+
+  // base64UrlToBytes calls atob, which throws a raw DOMException on invalid
+  // characters. A truncated or mangled ciphertext column — a partial write, a
+  // bad export/import, a manual SQL edit — would otherwise escape this
+  // module's FieldCryptoError contract and surface as an unhandled 500.
+  let iv: Uint8Array;
+  let ct: Uint8Array;
+  try {
+    iv = base64UrlToBytes(parts[1]);
+    ct = base64UrlToBytes(parts[2]);
+  } catch {
+    throw new FieldCryptoError('Malformed ciphertext envelope');
+  }
   if (iv.length !== IV_BYTES) throw new FieldCryptoError('Bad IV length');
 
   let plain: ArrayBuffer;

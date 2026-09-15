@@ -7,7 +7,7 @@
  * object-level authorization bugs get written.
  */
 
-import type { SessionRecord, SessionStore } from '../../auth/session';
+import { IDLE_TIMEOUT_SECONDS, type SessionRecord, type SessionStore } from '../../auth/session';
 
 export interface UserRecord {
   id: string;
@@ -107,11 +107,17 @@ export function createSessionStore(db: D1Database): SessionStore {
     },
 
     async deleteExpired(before: number): Promise<number> {
+      // THREE ways a session is dead, not one. Sweeping only on the absolute
+      // expiry leaves sessions killed by the 14-day IDLE timeout sitting in
+      // the table for the remaining ~76 days: already unusable, still stored.
       const result = await db
         .prepare(
-          'DELETE FROM sessions WHERE absolute_expires_at < ? OR (revoked_at IS NOT NULL AND revoked_at < ?)',
+          `DELETE FROM sessions
+            WHERE absolute_expires_at < ?1
+               OR last_seen_at < ?2
+               OR (revoked_at IS NOT NULL AND revoked_at < ?1)`,
         )
-        .bind(before, before)
+        .bind(before, before - IDLE_TIMEOUT_SECONDS)
         .run();
       return result.meta.changes ?? 0;
     },

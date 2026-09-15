@@ -11,7 +11,8 @@ import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../env';
 import { isLocalDev } from '../env';
 import { readSessionCookie } from '../auth/cookies';
-import { validateSession, type ActiveSession } from '../auth/session';
+import { sessionCookieMaxAge, validateSession, type ActiveSession } from '../auth/session';
+import { buildSessionCookie } from '../auth/cookies';
 import { createSessionStore } from '../db/repos/users';
 import { checkCsrf } from './csrf';
 import { error, unauthorized } from './responses';
@@ -55,4 +56,17 @@ export const requireSession: MiddlewareHandler<{ Bindings: Env; Variables: AppVa
 
   c.set('session', result.session);
   await next();
+
+  // Slide the cookie in step with the server-side idle window. Without this
+  // the browser expires the cookie a fixed period after LOGIN regardless of
+  // use, logging out an active operator while the session row is still valid.
+  if (result.refreshed) {
+    c.res.headers.append(
+      'Set-Cookie',
+      buildSessionCookie(token!, {
+        maxAgeSeconds: sessionCookieMaxAge(result.session, now),
+        insecureForLocalDev: isLocalDev(c.env),
+      }),
+    );
+  }
 };

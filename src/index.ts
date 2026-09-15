@@ -23,7 +23,38 @@ import { meRoutes } from './routes/me';
 import { webhookRoutes } from './routes/webhook';
 import { csrfGuard, type AppVariables } from './http/middleware';
 import { error, notFound } from './http/responses';
+import { securityHeaders } from './http/security-headers';
 import { createSessionStore } from './db/repos/users';
+import { sweepRateLimits } from './http/rate-limit';
+
+/**
+ * Apply security headers to a static-asset response.
+ *
+ * The assets binding returns the file as-is, so without this the DOCUMENT —
+ * the one response where CSP and anti-framing actually matter — would ship
+ * with no Content-Security-Policy, no frame-ancestors and no HSTS, while the
+ * JSON API responses (which a browser never renders) carried all of them.
+ *
+ * The Response from ASSETS is immutable, so it is rebuilt rather than mutated.
+ */
+function withSecurityHeaders(response: Response, env: Env): Response {
+  const headers = new Headers(response.headers);
+  for (const [key, value] of Object.entries(securityHeaders({ includeHsts: !isLocalDev(env) }))) {
+    headers.set(key, value);
+  }
+  // The shell is content-hashed by the build, but index.html itself must not
+  // be held by an intermediary — a stale shell pointing at deleted asset
+  // hashes is a white screen the operator cannot refresh out of on iOS.
+  const accept = response.headers.get('Content-Type') ?? '';
+  if (accept.includes('text/html')) {
+    headers.set('Cache-Control', 'no-cache');
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
 
 const app = new Hono<{ Bindings: Env; Variables: AppVariables }>();
 
@@ -65,7 +96,7 @@ export default {
     if (url.pathname.startsWith('/api/')) {
       return app.fetch(request, env, ctx);
     }
-    return env.ASSETS.fetch(request);
+    return withSecurityHeaders(await env.ASSETS.fetch(request), env);
   },
 
   /**
@@ -116,6 +147,11 @@ export default {
       (async () => {
         const removed = await createSessionStore(env.DB).deleteExpired(now);
         if (removed > 0) console.info('sessions_swept', { removed });
+
+        // Elapsed fixed windows are dead weight; keep one extra window so an
+        // in-flight request near a boundary still finds its row.
+        const windows = await sweepRateLimits(env.DB, now - 3600);
+        if (windows > 0) console.info('rate_limit_windows_swept', { windows });
       })(),
     );
   },

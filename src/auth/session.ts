@@ -45,8 +45,21 @@ import { sha256Base64Url } from '../crypto/hash';
 export const IDLE_TIMEOUT_SECONDS = 14 * 24 * 60 * 60; // 14 days
 /** Hard cap regardless of activity: re-authentication is required after this. */
 export const ABSOLUTE_TIMEOUT_SECONDS = 90 * 24 * 60 * 60; // 90 days
-/** Only write `last_seen_at` when it has moved by more than this. */
+/**
+ * Only write `last_seen_at` (and re-issue the cookie) when it has moved by
+ * more than this. Bounds D1 writes to at most one per session per interval
+ * while keeping the client and server clocks within it of each other.
+ */
 const TOUCH_GRANULARITY_SECONDS = 5 * 60;
+
+/**
+ * Cookie lifetime. Never longer than the idle window — a cookie that outlives
+ * the server-side session just produces a 401 the operator cannot explain.
+ */
+export function sessionCookieMaxAge(session: { absoluteExpiresAt: number }, now: number): number {
+  const untilAbsolute = Math.max(0, session.absoluteExpiresAt - now);
+  return Math.min(IDLE_TIMEOUT_SECONDS, untilAbsolute);
+}
 
 export interface SessionRecord {
   id: string;
@@ -116,8 +129,8 @@ export async function issueSession(
     createdAt: now,
     lastSeenAt: now,
     absoluteExpiresAt,
-    // The cookie should not outlive the session itself.
-    maxAgeSeconds: Math.min(IDLE_TIMEOUT_SECONDS, ABSOLUTE_TIMEOUT_SECONDS),
+    // The cookie must not outlive the session itself.
+    maxAgeSeconds: sessionCookieMaxAge({ absoluteExpiresAt }, now),
   };
 }
 
@@ -125,7 +138,19 @@ export type SessionFailure =
   'missing' | 'unknown' | 'revoked' | 'idle_expired' | 'absolute_expired';
 
 export type SessionValidation =
-  { ok: true; session: ActiveSession } | { ok: false; reason: SessionFailure };
+  | {
+      ok: true;
+      session: ActiveSession;
+      /**
+       * True when the idle window was slid forward, so the caller should
+       * re-issue the cookie with a fresh Max-Age. Without that, the browser
+       * expires the cookie a fixed period after LOGIN however actively the
+       * app is used, and the client and server disagree about when the
+       * session dies.
+       */
+      refreshed: boolean;
+    }
+  | { ok: false; reason: SessionFailure };
 
 /**
  * Validate a presented token. Returns a reason on failure so the route layer
@@ -148,12 +173,20 @@ export async function validateSession(
     return { ok: false, reason: 'idle_expired' };
 
   // Slide the idle window, but avoid a D1 write on every single request.
-  if (now - record.last_seen_at > TOUCH_GRANULARITY_SECONDS) {
+  //
+  // The COOKIE has to slide too. Without re-issuing Set-Cookie, the browser
+  // drops the cookie exactly IDLE_TIMEOUT_SECONDS after LOGIN no matter how
+  // actively the app is used — so a daily user is silently logged out on day
+  // 14 while the server-side row is still perfectly valid. The server and the
+  // client must agree on when the session dies.
+  const refreshed = now - record.last_seen_at > TOUCH_GRANULARITY_SECONDS;
+  if (refreshed) {
     await store.touch(record.id, now);
   }
 
   return {
     ok: true,
+    refreshed,
     session: {
       id: record.id,
       userId: record.user_id,

@@ -29,7 +29,7 @@ authRoutes.post('/login', async (c) => {
   // Brute-force and CPU-exhaustion guard. PBKDF2 at 600k iterations is
   // expensive by design, which makes an unthrottled login endpoint a DoS
   // vector as well as a credential-stuffing target.
-  const limit = await rateLimit(env.CACHE, `login:${clientKey(c.req.raw)}`, now, {
+  const limit = await rateLimit(env.DB, `login:${clientKey(c.req.raw)}`, now, {
     limit: 10,
     windowSeconds: 600,
   });

@@ -209,7 +209,10 @@ export class PlaidLedgerSource implements LedgerSource {
     };
   }
 
-  async verifyWebhook(rawBody: ArrayBuffer, headers: Headers): Promise<WebhookEvent> {
+  async verifyWebhook(
+    rawBody: ArrayBuffer,
+    headers: Headers,
+  ): Promise<WebhookEvent & { deliveryDigest: string; bodyDigest: string }> {
     const fetchJwk = cachedJwkFetcher(this.deps.jwkCache, async (keyId) => {
       const res = await this.deps.client.post<PlaidWebhookVerificationKeyGetResponse>(
         '/webhook_verification_key/get',
@@ -220,14 +223,12 @@ export class PlaidLedgerSource implements LedgerSource {
       return res.key as PlaidJwkPublicKey;
     });
 
-    const payload = (await verifyPlaidWebhook(
-      rawBody,
-      headers,
-      fetchJwk,
-      this.deps.now(),
-    )) as PlaidWebhookPayload;
-
-    return normalizeWebhook(payload);
+    const verified = await verifyPlaidWebhook(rawBody, headers, fetchJwk, this.deps.now());
+    return {
+      ...normalizeWebhook(verified.payload as PlaidWebhookPayload),
+      deliveryDigest: verified.deliveryDigest,
+      bodyDigest: verified.bodyDigest,
+    };
   }
 
   async removeItem(accessToken: string): Promise<void> {

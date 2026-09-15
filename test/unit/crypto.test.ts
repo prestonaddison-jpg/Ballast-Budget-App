@@ -125,3 +125,14 @@ describe('password hashing', () => {
     expect(stored.startsWith('pbkdf2$sha256$1234$')).toBe(true);
   });
 });
+
+describe('malformed input stays inside the error contract', () => {
+  it('reports a corrupted envelope as FieldCryptoError, not a DOMException', async () => {
+    // A truncated or mangled ciphertext column must not escape as an
+    // unhandled DOMException and become a 500.
+    const key = await importFieldKey(generateFieldKey());
+    for (const bad of ['v1.aBc.###', 'v1.###.aBc', 'v1..', 'v1.a.b.c']) {
+      await expect(decryptField(key, bad, 'aad')).rejects.toBeInstanceOf(FieldCryptoError);
+    }
+  });
+});

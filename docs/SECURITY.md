@@ -140,6 +140,15 @@ Notes that are easy to get wrong and are therefore encoded in the code:
 - **Rate-limit before the KDF.** 600k PBKDF2 iterations is real billed CPU on
   every attempt, so an unthrottled login endpoint is a DoS amplifier as well as
   a credential-stuffing target. The limiter runs first.
+- **The limiter is in D1, not KV, because it has to be atomic.** A KV
+  implementation reads the counter, compares, and writes `count + 1` across
+  three awaited steps. That is a read-modify-write with no atomic increment, so
+  a burst of concurrent logins all observe the same pre-increment value and all
+  pass — twenty parallel requests against a limit of three would every one of
+  them succeed. D1 increments and reads in a single
+  `INSERT ... ON CONFLICT DO UPDATE ... RETURNING` statement, which is atomic.
+  `test/worker/rate-limit.test.ts` fires twenty concurrent requests and asserts
+  exactly three are allowed.
 
 ## 5. Authorization — BOLA
 
@@ -180,6 +189,14 @@ to.
 `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`,
 `Cross-Origin-Opener-Policy`, `Cross-Origin-Resource-Policy`, `Vary`, and
 `Cache-Control: no-store, private` on anything derived from account data.
+
+**These are applied to the DOCUMENT as well as the API.** That is not
+automatic: the assets binding returns the built file unmodified, so an earlier
+version of this code shipped `index.html` — the only response where CSP and
+anti-framing actually do anything — with no headers at all, while the JSON
+responses a browser never renders carried every one of them. `withSecurityHeaders`
+in `src/index.ts` rebuilds the asset response, and `test/worker/routing.test.ts`
+asserts it, so the gap cannot silently reopen.
 
 CSP notes:
 
@@ -233,8 +250,24 @@ attacker replay a valid JWT against a swapped body. Note that
 throwing — key-import failure and signature failure are logged as distinct
 branches so a forged webhook is not mistaken for a key bug.
 
-Verified webhooks are recorded and **deduplicated on the body digest** (unique
-index, `INSERT OR IGNORE`, `meta.changes` checked) because Plaid retries.
+Verified webhooks are recorded and deduplicated because Plaid retries — but
+**the dedup key is the signed delivery token, not the body**.
+
+Keying on the body digest looks obviously right and is badly wrong: a
+`SYNC_UPDATES_AVAILABLE` body carries no nonce and no timestamp, so two
+genuinely different sync events for the same Item are **byte-identical**. A
+unique index on the body digest would swallow every sync notification after the
+first one, permanently, and Ballast would silently stop seeing new deposits —
+while looking perfectly healthy. The JWT is unique per delivery (it carries an
+`iat` the signature covers) and a genuine Plaid retry re-sends the same JWT, so
+hashing it gives exactly the wanted semantics. Enforced by a unique index plus
+`INSERT OR IGNORE` with `meta.changes` checked, so concurrent retries cannot
+both proceed.
+
+Verification failures return **401** (an authorization failure Plaid should not
+retry). A *retryable* failure — Plaid's own key endpoint being down — returns
+**503** instead, because the webhook may be perfectly valid and a 401 there
+would tell Plaid to stop, losing a legitimate sync notification for good.
 
 ## 10. Privacy stance
 
@@ -251,9 +284,6 @@ Honest list of what Phase 0 does **not** yet do:
   right long-term answer on iOS and is a Slice 7 candidate.
 - **No MFA.** Single-operator app behind device biometrics; revisit with
   multi-user (Tier B).
-- **Rate limiting is best-effort.** KV is eventually consistent, so a
-  distributed attacker can exceed the nominal limit. Acceptable as a
-  brute-force speed bump; stated so it is not mistaken for a hard quota.
 - **No `Clear-Site-Data` on logout.** It would also wipe the service-worker
   shell cache, forcing a cold re-fetch. Worth adding with a considered UX cost.
 - **No automated dependency scanning.** Dependabot + Socket.dev + SCA in CI are

@@ -244,7 +244,10 @@ export interface LedgerSource {
    * MUST be given the RAW request body bytes: the signature covers the exact
    * bytes sent, and re-serializing parsed JSON will not reproduce them.
    */
-  verifyWebhook(rawBody: ArrayBuffer, headers: Headers): Promise<WebhookEvent>;
+  verifyWebhook(
+    rawBody: ArrayBuffer,
+    headers: Headers,
+  ): Promise<WebhookEvent & { deliveryDigest: string; bodyDigest: string }>;
 
   /** Disconnect at the provider. Best-effort; local state is removed anyway. */
   removeItem(accessToken: string): Promise<void>;

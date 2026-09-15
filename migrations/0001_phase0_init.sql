@@ -54,8 +54,11 @@ CREATE TABLE sessions (
 
 CREATE UNIQUE INDEX idx_sessions_token_hash ON sessions (token_hash);
 CREATE INDEX idx_sessions_user ON sessions (user_id);
--- Supports the cron sweep that deletes dead sessions.
+-- Supports the cron sweep that deletes dead sessions. Both clocks are
+-- indexed: a session can die by the IDLE timeout long before its absolute
+-- expiry, and sweeping only on the latter leaves idle-dead rows for months.
 CREATE INDEX idx_sessions_expiry ON sessions (absolute_expires_at);
+CREATE INDEX idx_sessions_last_seen ON sessions (last_seen_at);
 
 -- ---------------------------------------------------------------------------
 -- Entities (§1: multi-entity, per-entity conservation)
@@ -147,16 +150,31 @@ CREATE INDEX idx_source_accounts_entity ON source_accounts (entity_id);
 -- ---------------------------------------------------------------------------
 
 -- Every VERIFIED webhook is recorded before it is acted on. Two jobs:
---   1. Replay/duplicate suppression. Plaid retries, and a webhook whose body
---      digest we have already processed must not drive a second sync.
+--   1. Replay/duplicate suppression. Plaid retries, and a delivery we have
+--      already processed must not drive a second sync.
 --   2. An audit trail for "why did the app think it was up to date?".
+--
+-- THE DEDUP KEY IS THE SIGNED DELIVERY, NOT THE BODY.
+-- Deduplicating on the body digest looks right and is badly wrong: a Plaid
+-- SYNC_UPDATES_AVAILABLE body carries no nonce and no timestamp, so two
+-- genuinely different sync events for the same Item are BYTE-IDENTICAL. A
+-- unique index on the body digest would therefore swallow every sync
+-- notification after the first one, permanently, and Ballast would silently
+-- stop seeing new deposits.
+--
+-- The JWT in the Plaid-Verification header is unique per DELIVERY (it carries
+-- an `iat`, and the signature covers it), while a genuine Plaid RETRY re-sends
+-- the very same JWT. Hashing it gives exactly the semantics wanted: retries
+-- collapse, distinct events do not.
 CREATE TABLE webhook_events (
   id              TEXT PRIMARY KEY,
   provider        TEXT NOT NULL DEFAULT 'plaid',
   source_item_id  TEXT,
   webhook_type    TEXT,
   webhook_code    TEXT,
-  -- Hex SHA-256 of the RAW body. Also the natural dedup key.
+  -- Hex SHA-256 of the signed delivery token (the Plaid-Verification JWT).
+  delivery_digest TEXT NOT NULL,
+  -- Hex SHA-256 of the raw body. Audit only — NOT unique, see above.
   body_sha256     TEXT NOT NULL,
   received_at     INTEGER NOT NULL,
   processed_at    INTEGER,
@@ -165,7 +183,8 @@ CREATE TABLE webhook_events (
   error_detail    TEXT
 );
 
-CREATE UNIQUE INDEX idx_webhook_events_digest ON webhook_events (provider, body_sha256);
+CREATE UNIQUE INDEX idx_webhook_events_delivery ON webhook_events (provider, delivery_digest);
+CREATE INDEX idx_webhook_events_body ON webhook_events (body_sha256);
 CREATE INDEX idx_webhook_events_item ON webhook_events (source_item_id);
 CREATE INDEX idx_webhook_events_received ON webhook_events (received_at);
 
@@ -192,6 +211,27 @@ CREATE TABLE sync_runs (
 
 CREATE INDEX idx_sync_runs_item ON sync_runs (item_id, started_at);
 CREATE INDEX idx_sync_runs_user ON sync_runs (user_id);
+
+-- ---------------------------------------------------------------------------
+-- Rate limiting
+-- ---------------------------------------------------------------------------
+
+-- Fixed-window counters, in D1 rather than KV.
+--
+-- KV cannot do this correctly: a read-modify-write across three awaited steps
+-- is not atomic, so a burst of concurrent logins all read the same
+-- pre-increment value and all pass. D1 can increment and read in ONE
+-- statement (INSERT ... ON CONFLICT DO UPDATE ... RETURNING), which is
+-- atomic, so a concurrent burst is counted correctly.
+CREATE TABLE rate_limits (
+  bucket        TEXT NOT NULL,
+  window_start  INTEGER NOT NULL,
+  count         INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (bucket, window_start)
+);
+
+-- Supports the cron sweep of elapsed windows.
+CREATE INDEX idx_rate_limits_window ON rate_limits (window_start);
 
 -- ---------------------------------------------------------------------------
 -- Audit log

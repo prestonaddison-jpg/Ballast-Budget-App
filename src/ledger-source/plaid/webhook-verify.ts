@@ -68,25 +68,54 @@ export class WebhookVerificationError extends LedgerSourceError {
 export type JwkFetcher = (keyId: string) => Promise<PlaidJwkPublicKey>;
 
 function decodeSegment<T>(segment: string, what: string): T {
+  let parsed: unknown;
   try {
-    const json = new TextDecoder().decode(base64UrlToBytes(segment));
-    return JSON.parse(json) as T;
+    parsed = JSON.parse(new TextDecoder().decode(base64UrlToBytes(segment)));
   } catch {
     throw new WebhookVerificationError(`Malformed JWT ${what}`);
   }
+  // JSON.parse('null') SUCCEEDS and returns null, and 'bnVsbA' is a valid
+  // base64url segment — so without this check a crafted header would reach
+  // `header.alg` on null and throw a raw TypeError, escaping this module's
+  // error contract and surfacing as a 500 instead of a clean rejection.
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new WebhookVerificationError(`JWT ${what} is not an object`);
+  }
+  return parsed as T;
 }
+
+/**
+ * Plaid key ids are fixed-length lowercase hex. Pinning the shape matters
+ * because `kid` is attacker-controlled and drives an outbound request: without
+ * it, every junk value is a distinct cache key and therefore a fresh call to
+ * Plaid.
+ */
+const KID_PATTERN = /^[a-f0-9]{16,64}$/i;
 
 /**
  * Verify a webhook and return its parsed body.
  *
  * @param rawBody The EXACT bytes received. Never a re-serialized object.
  */
+export interface VerifiedWebhook {
+  payload: unknown;
+  /**
+   * Hex SHA-256 of the signed delivery token. This — not the body digest — is
+   * the correct dedup key: a Plaid RETRY re-sends the same JWT, while two
+   * distinct events carry different `iat` values and therefore different
+   * signatures. Deduplicating on the body would collapse genuinely different
+   * sync notifications, whose bodies are byte-identical.
+   */
+  deliveryDigest: string;
+  bodyDigest: string;
+}
+
 export async function verifyPlaidWebhook(
   rawBody: ArrayBuffer,
   headers: Headers,
   fetchJwk: JwkFetcher,
   nowSeconds: number,
-): Promise<unknown> {
+): Promise<VerifiedWebhook> {
   const jwt = headers.get('Plaid-Verification');
   if (!jwt) throw new WebhookVerificationError('Missing Plaid-Verification header');
 
@@ -99,8 +128,10 @@ export async function verifyPlaidWebhook(
   if (header.alg !== 'ES256') {
     throw new WebhookVerificationError(`Unexpected alg: ${header.alg}`);
   }
-  if (typeof header.kid !== 'string' || header.kid.length === 0) {
-    throw new WebhookVerificationError('Missing kid');
+  if (typeof header.kid !== 'string' || !KID_PATTERN.test(header.kid)) {
+    // Rejecting a malformed kid BEFORE the fetch keeps an unauthenticated
+    // caller from using this route to drive arbitrary outbound requests.
+    throw new WebhookVerificationError('Missing or malformed kid');
   }
 
   // Step 5: fetch the key for this kid.
@@ -128,7 +159,12 @@ export async function verifyPlaidWebhook(
     throw new WebhookVerificationError('Could not import signing key');
   }
 
-  const signature = base64UrlToBytes(signatureB64); // raw r||s, 64 bytes
+  let signature: Uint8Array;
+  try {
+    signature = base64UrlToBytes(signatureB64); // raw r||s, 64 bytes
+  } catch {
+    throw new WebhookVerificationError('Malformed JWT signature segment');
+  }
   const signedData = utf8(`${headerB64}.${payloadB64}`);
   const signatureValid = await crypto.subtle.verify(
     { name: 'ECDSA', hash: 'SHA-256' },
@@ -158,11 +194,18 @@ export async function verifyPlaidWebhook(
   }
 
   // Only now is it safe to parse.
+  let payload: unknown;
   try {
-    return JSON.parse(new TextDecoder().decode(rawBody));
+    payload = JSON.parse(new TextDecoder().decode(rawBody));
   } catch {
     throw new WebhookVerificationError('Verified body was not valid JSON');
   }
+
+  return {
+    payload,
+    deliveryDigest: bytesToHex(await sha256(utf8(jwt))),
+    bodyDigest: actualDigest,
+  };
 }
 
 /**

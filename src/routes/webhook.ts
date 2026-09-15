@@ -23,14 +23,14 @@ import { Hono } from 'hono';
 import type { Env, SyncJob } from '../env';
 import { isLocalDev } from '../env';
 import { json, error } from '../http/responses';
-import { bytesToHex } from '../crypto/encoding';
-import { sha256 } from '../crypto/hash';
 import { PlaidClient, type PlaidEnvironment } from '../ledger-source/plaid/client';
 import { PlaidLedgerSource } from '../ledger-source/plaid/source';
 import { markWebhookProcessed, recordWebhook } from '../db/repos/webhooks';
 import { findItemByProviderId, updateItemStatus } from '../db/repos/connections';
 import { audit } from '../db/repos/audit';
 import { LedgerSourceError } from '../ledger-source/types';
+import { WebhookVerificationError } from '../ledger-source/plaid/webhook-verify';
+import { clientKey, rateLimit } from '../http/rate-limit';
 
 export const webhookRoutes = new Hono<{ Bindings: Env }>();
 
@@ -38,6 +38,20 @@ webhookRoutes.post('/plaid', async (c) => {
   const env = c.env;
   const ctx = { secure: !isLocalDev(env) };
   const now = Math.floor(Date.now() / 1000);
+
+  // 0. Rate limit. This route is public and unauthenticated, and verification
+  //    costs a KV read plus (on a cache miss) an outbound call to Plaid. The
+  //    limit is generous relative to real Plaid traffic but bounds how much an
+  //    anonymous caller can make this Worker do.
+  const limit = await rateLimit(env.DB, `webhook:${clientKey(c.req.raw)}`, now, {
+    limit: 120,
+    windowSeconds: 60,
+  });
+  if (!limit.allowed) {
+    return error(429, 'rate_limited', 'Too many requests.', ctx, {
+      'Retry-After': String(limit.retryAfterSeconds),
+    });
+  }
 
   // 1. Raw bytes, read exactly once.
   const rawBody = await c.req.arrayBuffer();
@@ -61,10 +75,23 @@ webhookRoutes.post('/plaid', async (c) => {
     event = await source.verifyWebhook(rawBody, c.req.raw.headers);
   } catch (err) {
     const reason = err instanceof LedgerSourceError ? err.message : 'verification failed';
+
+    // A VERIFICATION failure is an authorization failure: 401, and Plaid
+    // should not retry a webhook we will never accept.
+    //
+    // A RETRYABLE failure is different in kind. If fetching the signing key
+    // fails because Plaid itself is down, the webhook may well be perfectly
+    // valid — returning 401 there would tell Plaid to stop, and a legitimate
+    // sync notification would be lost permanently. Those get a 500 so the
+    // provider's own retry machinery does its job.
+    const retryable = err instanceof LedgerSourceError && err.retryable;
+    if (retryable && !(err instanceof WebhookVerificationError)) {
+      console.error('plaid_webhook_verify_unavailable', { reason });
+      return error(503, 'unavailable', 'Could not verify right now.', ctx);
+    }
+
     console.warn('plaid_webhook_rejected', { reason });
     await audit(env.DB, { userId: null, action: 'webhook.rejected', detail: { reason }, now });
-    // 401, not 500: this is an authorization failure, and Plaid should not
-    // treat it as a transient error worth retrying.
     return error(401, 'unauthorized', 'Invalid signature.', ctx);
   }
 
@@ -73,15 +100,16 @@ webhookRoutes.post('/plaid', async (c) => {
     return json({ ok: true, handled: false }, ctx);
   }
 
-  // 3. Deduplicate. Plaid retries, and a replayed body must not drive a
-  //    second sync.
-  const digest = bytesToHex(await sha256(rawBody));
+  // 3. Deduplicate on the SIGNED DELIVERY, not the body. Plaid retries, and a
+  //    retry re-sends the same JWT — while two genuinely different sync
+  //    events have byte-identical bodies and must both be processed.
   const intake = await recordWebhook(env.DB, {
     provider: 'plaid',
     sourceItemId: 'sourceItemId' in event ? event.sourceItemId : null,
     webhookType: null,
     webhookCode: event.kind,
-    bodySha256: digest,
+    deliveryDigest: event.deliveryDigest,
+    bodySha256: event.bodyDigest,
     receivedAt: now,
   });
   if (!intake.accepted) {

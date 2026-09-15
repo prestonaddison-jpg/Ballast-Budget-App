@@ -25,7 +25,10 @@ describe('API routing and CSRF ordering', () => {
     const res = await SELF.fetch('https://example.com/api/webhooks/plaid', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ webhook_type: 'TRANSACTIONS', webhook_code: 'SYNC_UPDATES_AVAILABLE' }),
+      body: JSON.stringify({
+        webhook_type: 'TRANSACTIONS',
+        webhook_code: 'SYNC_UPDATES_AVAILABLE',
+      }),
     });
 
     // 401 means it REACHED the route and failed signature verification, which
@@ -122,5 +125,40 @@ describe('security headers', () => {
   it('leaks no server or framework identification', async () => {
     const res = await SELF.fetch('https://example.com/api/health');
     expect(res.headers.get('X-Powered-By')).toBeNull();
+  });
+});
+
+describe('the PWA document itself', () => {
+  /**
+   * The shell is served by the assets binding, which returns the file
+   * unmodified. Without the Worker adding them, the DOCUMENT — the only
+   * response where CSP and anti-framing actually do anything — would ship with
+   * no protection at all, while the JSON API responses a browser never renders
+   * carried every header.
+   */
+  it('carries the security headers, not just the API', async () => {
+    const res = await SELF.fetch('https://example.com/');
+    expect(res.status).toBe(200);
+
+    const csp = res.headers.get('Content-Security-Policy');
+    expect(csp).toBeTruthy();
+    expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("script-src 'self'");
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('Referrer-Policy')).toBe('no-referrer');
+  });
+
+  it('serves the shell HTML without letting an intermediary hold it', async () => {
+    // A stale index.html pointing at deleted asset hashes is a white screen
+    // the operator cannot refresh out of on standalone iOS.
+    const res = await SELF.fetch('https://example.com/');
+    expect(res.headers.get('Cache-Control')).toContain('no-cache');
+  });
+
+  it('still serves the shell body', async () => {
+    const res = await SELF.fetch('https://example.com/');
+    const html = await res.text();
+    expect(html).toContain('<title>Ballast</title>');
+    expect(html).toContain('manifest.webmanifest');
   });
 });
