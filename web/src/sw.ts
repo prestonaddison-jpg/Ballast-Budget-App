@@ -14,6 +14,8 @@
  * All data comes from the network, every time.
  */
 
+import { isNeverCacheable } from './lib/sw-policy';
+
 declare const self: ServiceWorkerGlobalScope;
 
 // Replaced at build time by Vite's `define`; changing it invalidates the
@@ -22,9 +24,17 @@ declare const __BALLAST_SW_VERSION__: string;
 const VERSION = __BALLAST_SW_VERSION__;
 const SHELL_CACHE = `ballast-shell-${VERSION}`;
 
-/** Injected at build time with the hashed asset list. */
-const SHELL_ASSETS: string[] = (self as unknown as { __BALLAST_SHELL__?: string[] })
-  .__BALLAST_SHELL__ ?? ['/', '/index.html', '/manifest.webmanifest'];
+/**
+ * The app shell, injected at build time with the REAL content-hashed asset
+ * filenames (see the ballastShellManifest plugin in web/vite.config.ts).
+ *
+ * This has to happen at build time: bundle names carry content hashes that are
+ * not known when this file is written. Precaching the actual names is what
+ * makes the shell work offline on the FIRST launch, rather than only after a
+ * successful online visit has populated the runtime cache.
+ */
+declare const __BALLAST_SHELL__: string[];
+const SHELL_ASSETS: string[] = __BALLAST_SHELL__;
 
 self.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(
@@ -49,24 +59,13 @@ self.addEventListener('activate', (event: ExtendableEvent) => {
   );
 });
 
-/** Anything the service worker must keep its hands off entirely. */
-function isNeverCacheable(url: URL, request: Request): boolean {
-  if (url.origin !== self.location.origin) return true;
-  if (url.pathname.startsWith('/api/')) return true;
-  if (url.pathname.startsWith('/auth/')) return true;
-  if (url.pathname.startsWith('/webhooks/')) return true;
-  // Only GET is ever cacheable.
-  if (request.method !== 'GET') return true;
-  return false;
-}
-
 self.addEventListener('fetch', (event: FetchEvent) => {
   const request = event.request;
   const url = new URL(request.url);
 
   // Pass straight through to the network — no respondWith, no interception,
   // so there is no code path on which a financial response can be stored.
-  if (isNeverCacheable(url, request)) return;
+  if (isNeverCacheable({ url, method: request.method, workerOrigin: self.location.origin })) return;
 
   // App-shell navigations: network first (so a deploy lands immediately),
   // falling back to the cached shell when offline.
@@ -76,7 +75,13 @@ self.addEventListener('fetch', (event: FetchEvent) => {
         try {
           return await fetch(request);
         } catch {
-          const cached = await caches.match('/index.html', { cacheName: SHELL_CACHE });
+          // Cache Storage matches on URL, so '/' and '/index.html' are
+          // DIFFERENT keys. Both are precached; try each before giving up,
+          // because which one a navigation resolves to depends on how the
+          // app was opened (Home Screen start_url vs a deep link).
+          const cached =
+            (await caches.match('/index.html', { cacheName: SHELL_CACHE })) ??
+            (await caches.match('/', { cacheName: SHELL_CACHE }));
           return (
             cached ??
             new Response('Offline', { status: 503, headers: { 'content-type': 'text/plain' } })
