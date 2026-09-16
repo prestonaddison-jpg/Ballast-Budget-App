@@ -1,8 +1,8 @@
 /* Single entry point so index.html carries one stylesheet link and the CSP
  * stays narrow. Order matters: tokens define the contract, the shared
  * component layer consumes it, the app layer composes on top. */
-@import "./tokens.css";
-@import "./components.css";
-@import "./gauge.css";
-@import "./canvas.css";
-@import "./ballast.css";
+@import './tokens.css';
+@import './components.css';
+@import './gauge.css';
+@import './canvas.css';
+@import './ballast.css';

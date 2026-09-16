@@ -24,7 +24,7 @@
  * Editorial-minimal: cool paper, deep ink, one accent, generous whitespace;
  * cards are a 1px border, no glass. Deliberately not cream-serif-terracotta.
  */
-[data-theme="atelier"] {
+[data-theme='atelier'] {
   --bg: #f3f4f2;
   --bgfade: #f3f4f2;
   --ink: #181a17;
@@ -35,21 +35,25 @@
   --good: #1f8a5a;
   --watch: #c08a1e;
   --bad: #c0492f;
-  --rule: linear-gradient(90deg, transparent, rgba(24, 26, 23, .14), transparent);
-  --ruleV: linear-gradient(180deg, transparent, rgba(24, 26, 23, .14), transparent);
-  --track: rgba(24, 26, 23, .1);
+  --rule: linear-gradient(90deg, transparent, rgba(24, 26, 23, 0.14), transparent);
+  --ruleV: linear-gradient(180deg, transparent, rgba(24, 26, 23, 0.14), transparent);
+  --track: rgba(24, 26, 23, 0.1);
   --card: #ffffff;
-  --cardln: rgba(24, 26, 23, .1);
-  --display: "Bricolage Grotesque";
-  --body: "Hanken Grotesk";
-  --data: "Space Mono";
+  --cardln: rgba(24, 26, 23, 0.1);
+  /* Modal surfaces are NOT cards. A card is a lift off the page and may be
+     translucent; a sheet has live content behind it and must be opaque, or the
+     Canvas reads straight through the field the operator is typing money into. */
+  --sheet: #ffffff;
+  --display: 'Bricolage Grotesque';
+  --body: 'Hanken Grotesk';
+  --data: 'Space Mono';
 }
 
 /* --- 9 · Graphite — DARK -------------------------------------------------
  * A refined neutral instrument: charcoal, warm-neutral text, one steel-blue
  * accent. Precision and contrast, no glow. Deliberately not near-black+acid.
  */
-[data-theme="graphite"] {
+[data-theme='graphite'] {
   --bg: linear-gradient(180deg, #16181a, #121416);
   --bgfade: #121416;
   --ink: #eceeec;
@@ -60,14 +64,18 @@
   --good: #5bbf8a;
   --watch: #d8a23a;
   --bad: #d4634f;
-  --rule: linear-gradient(90deg, transparent, rgba(180, 190, 190, .18), transparent);
-  --ruleV: linear-gradient(180deg, transparent, rgba(180, 190, 190, .18), transparent);
-  --track: rgba(180, 190, 190, .13);
-  --card: rgba(255, 255, 255, .03);
-  --cardln: rgba(255, 255, 255, .1);
-  --display: "Bricolage Grotesque";
-  --body: "Hanken Grotesk";
-  --data: "Space Mono";
+  --rule: linear-gradient(90deg, transparent, rgba(180, 190, 190, 0.18), transparent);
+  --ruleV: linear-gradient(180deg, transparent, rgba(180, 190, 190, 0.18), transparent);
+  --track: rgba(180, 190, 190, 0.13);
+  --card: rgba(255, 255, 255, 0.03);
+  /* In Graphite --card is 3% white. Correct for a card, catastrophic for a
+     dialog: at 3% the sheet is effectively absent and its primary button sat
+     at roughly 1:1 against what showed through. */
+  --sheet: #1b1e21;
+  --cardln: rgba(255, 255, 255, 0.1);
+  --display: 'Bricolage Grotesque';
+  --body: 'Hanken Grotesk';
+  --data: 'Space Mono';
 }
 
 /* --- Praeclarus signature override (both themes) -------------------------
@@ -85,7 +93,7 @@
   --t-fast: 160ms;
   --t-ui: 280ms;
   --t-gauge: 560ms;
-  --ease-out: cubic-bezier(.22, .78, .3, 1);
+  --ease-out: cubic-bezier(0.22, 0.78, 0.3, 1);
 
   /* Geometry */
   --r-card: 18px;
@@ -94,13 +102,13 @@
 
 /* Signature surfaces. Navy reads as a deep ground in BOTH poles; gold is the
  * accent that sits on it. Kept here so the signature survives a theme swap. */
-[data-theme="atelier"] {
+[data-theme='atelier'] {
   --sig-ground: var(--pv-navy);
   --sig-ink: #f4f6fa;
   --sig-accent: var(--pv-gold);
 }
 
-[data-theme="graphite"] {
+[data-theme='graphite'] {
   --sig-ground: #0c1523;
   --sig-ink: #f4f6fa;
   --sig-accent: var(--pv-gold-soft);

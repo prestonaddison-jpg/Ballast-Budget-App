@@ -74,6 +74,22 @@ async function signIn(page) {
   await ctx.close();
 }
 
+/* --- The other three Now-Bar destinations ------------------------------ */
+{
+  const { ctx, page } = await session('light');
+  await signIn(page);
+  for (const [key, name] of [
+    ['needs', '07-needs-you'],
+    ['accounts', '08-accounts'],
+    ['settings', '09-settings'],
+  ]) {
+    await page.click(`.nowbar .nb[data-key="${key}"]`);
+    await page.waitForTimeout(400);
+    await shot(page, name);
+  }
+  await ctx.close();
+}
+
 /* --- Canvas, Graphite (dark) ------------------------------------------- */
 {
   const { ctx, page } = await session('dark');

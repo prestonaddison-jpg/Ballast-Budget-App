@@ -42,9 +42,14 @@ export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {
   // testable without a DOM. This function only builds elements.
   const view = presentTile(envelope);
 
-  const tile = document.createElement('button');
-  tile.type = 'button';
-  tile.className = 'tile';
+  // A tile only becomes a BUTTON when there is something to tap it for.
+  // Rendering an inert one as a disabled button dims the most important tile
+  // on the Canvas and has a screen reader announce it as unavailable, when in
+  // fact it is simply not a control.
+  const interactive = opts.onSelect != null;
+  const tile = document.createElement(interactive ? 'button' : 'div');
+  if (interactive) (tile as HTMLButtonElement).type = 'button';
+  tile.className = interactive ? 'tile' : 'tile tile-static';
   tile.dataset.type = envelope.type;
 
   const head = document.createElement('div');
@@ -100,10 +105,8 @@ export function createEnvelopeTile(opts: EnvelopeTileOptions): HTMLElement {
   if (opts.note) parts.push(opts.note);
   tile.setAttribute('aria-label', parts.join(', '));
 
-  if (opts.onSelect) {
+  if (interactive) {
     tile.addEventListener('click', () => opts.onSelect!(envelope));
-  } else {
-    tile.disabled = true;
   }
 
   return tile;

@@ -46,7 +46,9 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
   backdrop.className = 'sheet-backdrop';
 
   const sheet = document.createElement('div');
-  sheet.className = 'sheet card';
+  // NOT `sheet card`. A card may be translucent; a dialog with live content
+  // behind it may not. .sheet carries its own opaque surface.
+  sheet.className = 'sheet';
   sheet.setAttribute('role', 'dialog');
   sheet.setAttribute('aria-modal', 'true');
   sheet.setAttribute('aria-labelledby', 'fund-sheet-title');
@@ -108,7 +110,7 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
   const confirm = document.createElement('button');
   confirm.type = 'button';
   confirm.className = 'btn-primary';
-  confirm.textContent = 'Move it';
+  confirm.textContent = 'Set it aside';
   confirm.disabled = availableMinor == null;
 
   actions.append(cancel, confirm);
@@ -132,7 +134,7 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
     }
 
     confirm.disabled = true;
-    confirm.textContent = 'Moving…';
+    confirm.textContent = 'Setting aside…';
     try {
       await opts.onConfirm(parsed.minor);
     } catch (err) {
@@ -145,7 +147,7 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
         ? "That didn't go through. Nothing moved."
         : "We couldn't confirm that. Check the envelope before trying again.";
       confirm.disabled = false;
-      confirm.textContent = 'Move it';
+      confirm.textContent = 'Set it aside';
     }
   });
 

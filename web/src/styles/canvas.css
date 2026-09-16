@@ -9,14 +9,22 @@
  * elsewhere.
  * ========================================================================== */
 
-.canvas { display: flex; flex-direction: column; gap: 26px; }
+.canvas {
+  display: flex;
+  flex-direction: column;
+  gap: 26px;
+}
 
 /* --- Zones: the chunking that actually reduces load ---------------------- */
-.zone { display: flex; flex-direction: column; gap: 4px; }
+.zone {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
 
 .zone-title {
-  font-size: .78rem;
-  letter-spacing: .09em;
+  font-size: 0.78rem;
+  letter-spacing: 0.09em;
   text-transform: uppercase;
   font-weight: 700;
   color: var(--soft);
@@ -24,7 +32,7 @@
 
 .zone-caption {
   margin: 0 0 10px;
-  font-size: .82rem;
+  font-size: 0.82rem;
   color: var(--soft);
 }
 
@@ -59,16 +67,32 @@
     border-color var(--t-fast) var(--ease-out);
 }
 
-.tile:hover:not(:disabled) { border-color: color-mix(in srgb, var(--accent) 45%, var(--cardln)); }
+.tile:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--cardln));
+}
 /* Doherty: the tap must feel instant. transform only — never layout. */
-.tile:active:not(:disabled) { transform: scale(.985); }
-.tile:disabled { cursor: default; opacity: .8; }
+.tile:active:not(:disabled) {
+  transform: scale(0.985);
+}
+.tile:disabled {
+  cursor: default;
+  opacity: 0.8;
+}
+/* A tile that is not a control. Full opacity — it is not unavailable, it just
+   is not something you tap. */
+.tile-static {
+  cursor: default;
+}
 
-.tile-head { display: flex; align-items: baseline; gap: 8px; }
+.tile-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
 
 .tile-name {
   font-weight: 650;
-  font-size: .92rem;
+  font-size: 0.92rem;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -78,8 +102,8 @@
 .tile-kind {
   margin-left: auto;
   flex: none;
-  font-size: .62rem;
-  letter-spacing: .07em;
+  font-size: 0.62rem;
+  letter-spacing: 0.07em;
   text-transform: uppercase;
   font-weight: 700;
   color: var(--soft);
@@ -89,22 +113,28 @@
   font-family: var(--display), system-ui, sans-serif;
   font-weight: 700;
   font-size: 1.55rem;
-  letter-spacing: -.03em;
+  letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
   line-height: 1.05;
 }
 
 /* The shared .tide meter, sized down for a tile. Fill is --accent2 -> --accent
  * from the shared component layer: brand, not status. */
-.tile-tide { height: 5px; margin-top: 2px; }
+.tile-tide {
+  height: 5px;
+  margin-top: 2px;
+}
 
 .tile-progress {
-  font-size: .72rem;
+  font-size: 0.72rem;
   color: var(--soft);
   font-variant-numeric: tabular-nums;
 }
 
-.tile-note { font-size: .72rem; color: var(--soft); }
+.tile-note {
+  font-size: 0.72rem;
+  color: var(--soft);
+}
 
 /* Unallocated is the one tile that earns emphasis: it is the money with no job
  * yet, and the whole app exists to get it one. A quiet accent edge, not a
@@ -122,81 +152,162 @@
  * the whole screen is about: the money with no job, and the source of every
  * fund action. At half width it sat alone in a two-column row with a hole
  * beside it, reading like a leftover rather than the headline. */
-.zone[data-zone='available'] .zone-grid { grid-template-columns: 1fr; }
+.zone[data-zone='available'] .zone-grid {
+  grid-template-columns: 1fr;
+}
 
 @media (min-width: 860px) {
-  .zone-grid { grid-template-columns: repeat(auto-fill, minmax(172px, 1fr)); }
-  .zone[data-zone='available'] .zone-grid { grid-template-columns: 1fr; }
+  .zone-grid {
+    grid-template-columns: repeat(auto-fill, minmax(172px, 1fr));
+  }
+  .zone[data-zone='available'] .zone-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* --- Fund sheet (tap-to-fund) -------------------------------------------- */
 .sheet-backdrop {
-  position: fixed; inset: 0; z-index: 50;
-  display: flex; align-items: flex-end; justify-content: center;
-  background: rgba(8, 10, 14, .45);
-  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(8, 10, 14, 0.45);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   padding: 0;
 }
 
 .sheet {
-  width: 100%; max-width: 520px;
+  width: 100%;
+  max-width: 520px;
+  background: var(--sheet);
+  border: 1px solid var(--cardln);
+  border-bottom: 0;
   border-radius: 20px 20px 0 0;
+  box-shadow: 0 -14px 40px rgba(0, 0, 0, 0.28);
   padding: 20px;
+  /* The keypad takes roughly half the screen on an iPhone. Cap the sheet and
+     let it scroll inside itself so the chips and BOTH buttons stay reachable
+     instead of sitting behind the keyboard. */
+  max-height: 88svh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   /* Thumb-reachable and clear of the home indicator. */
   padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
-  display: flex; flex-direction: column; gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
   animation: sheet-in var(--t-ui) var(--ease-out);
 }
 
 /* Doherty + reduced-motion: the global rule in components.css disables this. */
 @keyframes sheet-in {
-  from { transform: translateY(16px); opacity: 0; }
-  to   { transform: translateY(0);    opacity: 1; }
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
 }
 
-.sheet-title { font-size: 1.15rem; }
-.sheet-sub { margin: 0; font-size: .85rem; color: var(--soft); }
+.sheet-title {
+  font-size: 1.15rem;
+}
+.sheet-sub {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--soft);
+}
 
 .sheet-input {
-  width: 100%; min-height: var(--tap);
+  width: 100%;
+  min-height: var(--tap);
   padding: 12px 14px;
-  font-size: 1.35rem; font-variant-numeric: tabular-nums;
-  border: 1px solid var(--cardln); border-radius: 12px;
-  background: transparent; color: var(--ink);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  border: 1px solid var(--cardln);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
 }
 
-.sheet-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.sheet-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
 
 .chip {
-  min-height: var(--tap); padding: 8px 14px;
-  border-radius: 99px; cursor: pointer; font: inherit; font-size: .85rem;
-  border: 1px solid var(--cardln); background: transparent; color: var(--ink);
+  min-height: var(--tap);
+  padding: 8px 14px;
+  border-radius: 99px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--cardln);
+  background: transparent;
+  color: var(--ink);
 }
-.chip:hover { border-color: var(--accent); }
+.chip:hover {
+  border-color: var(--accent);
+}
 
-.sheet-message { margin: 0; min-height: 1.2em; font-size: .85rem; color: var(--bad); }
+.sheet-message {
+  margin: 0;
+  min-height: 1.2em;
+  font-size: 0.85rem;
+  color: var(--bad);
+}
 
-.sheet-actions { display: flex; gap: 10px; margin-top: 2px; }
+.sheet-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+}
 
-.btn-primary, .btn-quiet {
-  flex: 1; min-height: var(--tap);
-  border-radius: 99px; cursor: pointer; font: inherit; font-weight: 650;
+.btn-primary,
+.btn-quiet {
+  flex: 1;
+  min-height: var(--tap);
+  border-radius: 99px;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
 }
 .btn-primary {
-  border: 0; background: var(--sig-ground); color: var(--sig-ink);
+  background: var(--sig-ground);
+  color: var(--sig-ink);
+  /* The gold edge is the Praeclarus signature AND the thing that makes this
+     button a button. In Graphite, navy #0c1523 against the sheet's #1b1e21 is
+     about 1.2:1 — the shape effectively disappears, which is a WCAG 1.4.11
+     failure on the one control that commits money. The border carries the
+     contrast so the fill can stay the brand colour. */
+  border: 1px solid var(--sig-accent);
 }
-.btn-primary:disabled { opacity: .5; cursor: default; }
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
 .btn-quiet {
-  border: 1px solid var(--cardln); background: transparent; color: var(--ink);
+  border: 1px solid var(--cardln);
+  background: transparent;
+  color: var(--ink);
 }
 
 /* --- Over-allocation notice ---------------------------------------------
  * The one place the Canvas uses --bad, and it earns it: allocations exceed
  * the cash that actually exists. That is a real problem, not "not yet full". */
 .over-allocated {
-  padding: 12px 14px; border-radius: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--bad) 40%, var(--cardln));
   background: color-mix(in srgb, var(--bad) 7%, transparent);
-  font-size: .87rem;
+  font-size: 0.87rem;
 }
-.over-allocated strong { color: var(--bad); }
+.over-allocated strong {
+  color: var(--bad);
+}

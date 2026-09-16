@@ -18,7 +18,7 @@ export interface FocalAlert {
   title: string;
   /** The concrete when / context. */
   detail?: string;
-  /** Label for the single tap. */
+  /** Label for the single tap. Only rendered when `onAction` is supplied. */
   action: string;
   tone?: AlertTone;
   onAction?: () => void;
@@ -55,14 +55,22 @@ export function createFocalAlert(alert: FocalAlert): HTMLElement {
     txt.appendChild(span);
   }
 
-  const go = document.createElement('button');
-  go.type = 'button';
-  go.className = 'go';
-  go.textContent = alert.action;
-  // The accessible name carries the whole intention, not just "Review".
-  go.setAttribute('aria-label', `${alert.action}: ${alert.title}`);
-  if (alert.onAction) go.addEventListener('click', alert.onAction);
+  card.append(dot, txt);
 
-  card.append(dot, txt, go);
+  // ONLY when there is something to do. An action button wired to nothing is
+  // worse than no button: this card is the one Von Restorff element on the
+  // screen, so a dead control here is the app's most prominent broken promise,
+  // and it teaches the operator that tapping things does not work.
+  if (alert.onAction) {
+    const go = document.createElement('button');
+    go.type = 'button';
+    go.className = 'go';
+    go.textContent = alert.action;
+    // The accessible name carries the whole intention, not just "Review".
+    go.setAttribute('aria-label', `${alert.action}: ${alert.title}`);
+    go.addEventListener('click', alert.onAction);
+    card.append(go);
+  }
+
   return card;
 }

@@ -48,7 +48,7 @@
     {
       "binding": "DB",
       "database_name": "ballast-db",
-      "database_id": "PLACEHOLDER_SET_BY_WRANGLER_D1_CREATE",
+      "database_id": "e005e79c-2719-40d2-9837-eb0cdb6738c2",
       "migrations_dir": "migrations"
     }
   ],
@@ -57,7 +57,7 @@
   // keys (public) and rate-limit counters. Balances and ledger state live in
   // D1 — KV is eventually consistent and must never be a source of truth.
   "kv_namespaces": [
-    { "binding": "CACHE", "id": "PLACEHOLDER_SET_BY_WRANGLER_KV_CREATE" }
+    { "binding": "CACHE", "id": "c8581f3bdedf465d9c79ac957ca8546a" }
   ],
 
   // Receipts (Slice 5). Highest-sensitivity tier (§16).
