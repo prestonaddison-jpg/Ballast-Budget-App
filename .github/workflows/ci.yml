@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A newer push to the same branch makes the older run pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: typecheck · format · unit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run typecheck
+      # Runs inside workerd against a real D1. Correct for the money model and
+      # the Worker; structurally blind to anything visual — see the e2e job.
+      - run: npm test
+
+  e2e:
+    name: browser (${{ matrix.browser }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # Ballast is installed to the iOS Home Screen, so WebKit is the engine
+        # it actually runs in. Chromium is kept because it fails faster and
+        # catches most layout regressions.
+        browser: [chromium, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+
+      - name: Install browser
+        run: npx playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Local-only secrets
+        # wrangler dev reads .dev.vars. These never leave the runner and are not
+        # the production values — FIELD_ENCRYPTION_KEY is generated fresh per
+        # run so nothing real is ever committed or reused.
+        run: |
+          {
+            echo 'PLAID_CLIENT_ID="ci-not-a-real-id"'
+            echo 'PLAID_SECRET="ci-not-a-real-secret"'
+            echo "FIELD_ENCRYPTION_KEY=\"$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")\""
+          } > .dev.vars
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+        env:
+          BALLAST_BROWSER: ${{ matrix.browser }}
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-${{ matrix.browser }}
+          path: playwright-report/
+          retention-days: 14

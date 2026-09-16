@@ -21,3 +21,8 @@ coverage/
 
 # Generated preview output (screenshots, the shareable demo page).
 preview/
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

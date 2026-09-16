@@ -35,7 +35,7 @@ const CSP = [
   // which must run before first paint to avoid a light flash for dark-pole
   // users. Everything else is 'self'. test/worker/csp.test.ts re-computes the
   // hash from index.html and asserts it is still listed here.
-  "script-src 'self' 'sha256-tcK04qrUXA6vmj5/fd3mzqnvcmFzvXf5don0dMtAZ4Q='",
+  "script-src 'self' 'sha256-nCijoAHChN2bovV1yzw3lwDUvTIVQhZfRYmETfcObTw='",
   // No 'unsafe-inline'. The components set styles through the CSSOM
   // (element.style.*), which CSP does not govern at all — the earlier comment
   // claiming otherwise was simply wrong about how CSP works. The one real

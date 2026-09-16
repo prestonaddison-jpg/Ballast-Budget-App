@@ -31,7 +31,21 @@ async function hashPassword(password, iterations = 600_000) {
   return `pbkdf2$sha256$${iterations}$${b64url(salt)}$${b64url(new Uint8Array(bits))}`;
 }
 
-const id = (p) => `${p}_${b64url(crypto.getRandomValues(new Uint8Array(12)))}`;
+// DETERMINISTIC ids. The e2e suite re-seeds before every test, and random ids
+// would mean a saved session, a cached selector or a stored storageState went
+// stale on each reset.
+let counter = 0;
+const id = (p) => `${p}_seed${String(counter++).padStart(4, '0')}`;
+
+/** The seeded session token, so tests can authenticate without the login route
+ *  — which is rate limited to 10 attempts per window per IP, and would 429 the
+ *  eleventh test onwards. The login FORM gets its own dedicated test. */
+export const SESSION_TOKEN = 'e2e-seeded-session-token-not-a-secret';
+
+async function sha256b64url(text) {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return b64url(new Uint8Array(digest));
+}
 const q = (s) => `'${String(s).replace(/'/g, "''")}'`;
 // Row timestamps are fixed so re-seeding is deterministic; the SYNC clock is
 // real, because the freshness indicator is showing a genuine elapsed time and a
@@ -107,6 +121,15 @@ for (const e of envelopes) {
      VALUES (${q(id('led'))},${q(userId)},${q(entityId)},${q(byKey.unalloc.id)},${q(e.id)},${e.funded},'fund',${q('Preview seed')},${NOW});`,
   );
 }
+
+// A ready-made session, so the suite never touches the login route.
+sql.push(
+  `INSERT INTO sessions (id,user_id,token_hash,created_at,last_seen_at,absolute_expires_at)
+   VALUES (${q(id('ses'))},${q(userId)},${q(await sha256b64url(SESSION_TOKEN))},${NOW},${SYNCED},${SYNCED + 86400},);`.replace(
+    ',);',
+    ');',
+  ),
+);
 
 writeFileSync('/tmp/ballast-seed.sql', sql.join('\n'));
 

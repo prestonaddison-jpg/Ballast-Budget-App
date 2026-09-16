@@ -41,7 +41,7 @@
     // Assets are served BEFORE the Worker by default, so without this any
     // /api/* path colliding with a built file would be served as a static
     // file and the API would never run. Patterns MUST start with "/".
-    "run_worker_first": ["/api/*"]
+    "run_worker_first": ["/api/*"],
   },
 
   "d1_databases": [
@@ -49,26 +49,20 @@
       "binding": "DB",
       "database_name": "ballast-db",
       "database_id": "e005e79c-2719-40d2-9837-eb0cdb6738c2",
-      "migrations_dir": "migrations"
-    }
+      "migrations_dir": "migrations",
+    },
   ],
 
   // KV holds ONLY non-request, non-authoritative data: Plaid webhook signing
   // keys (public) and rate-limit counters. Balances and ledger state live in
   // D1 — KV is eventually consistent and must never be a source of truth.
-  "kv_namespaces": [
-    { "binding": "CACHE", "id": "c8581f3bdedf465d9c79ac957ca8546a" }
-  ],
+  "kv_namespaces": [{ "binding": "CACHE", "id": "c8581f3bdedf465d9c79ac957ca8546a" }],
 
   // Receipts (Slice 5). Highest-sensitivity tier (§16).
-  "r2_buckets": [
-    { "binding": "RECEIPTS", "bucket_name": "ballast-receipts" }
-  ],
+  "r2_buckets": [{ "binding": "RECEIPTS", "bucket_name": "ballast-receipts" }],
 
   "queues": {
-    "producers": [
-      { "binding": "SYNC_QUEUE", "queue": "ballast-sync" }
-    ],
+    "producers": [{ "binding": "SYNC_QUEUE", "queue": "ballast-sync" }],
     "consumers": [
       {
         "queue": "ballast-sync",
@@ -79,9 +73,9 @@
         "retry_delay": 30,
         // Without a DLQ, messages that exhaust max_retries are SILENTLY
         // DISCARDED. For a financial sync pipeline that is data loss.
-        "dead_letter_queue": "ballast-sync-dlq"
-      }
-    ]
+        "dead_letter_queue": "ballast-sync-dlq",
+      },
+    ],
   },
 
   // Sync sweep. Webhooks are the real-time signal; cron is the safety net for
@@ -90,8 +84,8 @@
 
   "vars": {
     "PLAID_ENV": "sandbox",
-    "APP_ORIGIN": "http://localhost:8787"
-  }
+    "APP_ORIGIN": "http://localhost:8787",
+  },
 
   // Secrets (via `wrangler secret put`, never in this file):
   //   PLAID_CLIENT_ID

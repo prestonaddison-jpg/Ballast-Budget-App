@@ -21,13 +21,13 @@ business cash position and transaction history** — commercially sensitive, but
 not directly monetizable, and not a path to moving funds. The controls are
 sized to that.
 
-| Asset | Exposure if lost | Control |
-|---|---|---|
-| Plaid access tokens | Read access to bank transactions until revoked | Field-encrypted at rest (AES-256-GCM, AAD-bound), server-side only, never sent to the client |
-| Session cookie | Full app access as the operator | HttpOnly (JS can never read it), `__Host-` prefix, `SameSite=Strict`, hashed at rest |
-| Operator password | Account takeover | PBKDF2-HMAC-SHA256, 600k iterations, per-user salt |
-| D1 contents | Balances, transaction history, audit trail | AES-256-GCM at rest via Cloudflare KMS; secrets additionally field-encrypted |
-| Receipts (R2, Slice 5) | Highest tier — may contain card numbers | App-layer encryption, cookieless serving, attachment disposition |
+| Asset                  | Exposure if lost                               | Control                                                                                      |
+| ---------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| Plaid access tokens    | Read access to bank transactions until revoked | Field-encrypted at rest (AES-256-GCM, AAD-bound), server-side only, never sent to the client |
+| Session cookie         | Full app access as the operator                | HttpOnly (JS can never read it), `__Host-` prefix, `SameSite=Strict`, hashed at rest         |
+| Operator password      | Account takeover                               | PBKDF2-HMAC-SHA256, 600k iterations, per-user salt                                           |
+| D1 contents            | Balances, transaction history, audit trail     | AES-256-GCM at rest via Cloudflare KMS; secrets additionally field-encrypted                 |
+| Receipts (R2, Slice 5) | Highest tier — may contain card numbers        | App-layer encryption, cookieless serving, attachment disposition                             |
 
 **Explicitly out of scope:** a compromised Worker. Field encryption protects a
 D1 dump, a backup, or a SQL export. It cannot protect against code running with
@@ -35,15 +35,15 @@ the key — that is stated so nobody over-trusts it.
 
 ## 2. Session design
 
-| Property | Value | Why |
-|---|---|---|
-| Token | 256 bits, `crypto.getRandomValues` | ASVS V7.2.3 requires ≥128 bits for reference tokens. (The Session Management Cheat Sheet still quotes 64; 5.0's 128 is the floor built to.) |
-| Format | Opaque, not a JWT | Nothing to parse, no algorithm to confuse, revocation is a row update rather than a blocklist |
-| At rest | SHA-256 of the token | A dump of `sessions` yields nothing usable. **Defence in depth — ASVS 5.0 has no requirement for this, so no requirement id is claimed.** A fast hash is correct here: the input already has 256 bits of entropy, so there is nothing to brute-force |
-| Idle timeout | 14 days | See risk analysis below |
-| Absolute timeout | 90 days | Caps a stolen token that is kept warm by use |
-| Rotation | New token on every authentication, old one revoked | ASVS V7.2.4 — both halves: mint new **and** terminate old. Kills session fixation |
-| Revocation | Server-side, immediate | `revoked_at` checked on every validation |
+| Property         | Value                                              | Why                                                                                                                                                                                                                                                  |
+| ---------------- | -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Token            | 256 bits, `crypto.getRandomValues`                 | ASVS V7.2.3 requires ≥128 bits for reference tokens. (The Session Management Cheat Sheet still quotes 64; 5.0's 128 is the floor built to.)                                                                                                          |
+| Format           | Opaque, not a JWT                                  | Nothing to parse, no algorithm to confuse, revocation is a row update rather than a blocklist                                                                                                                                                        |
+| At rest          | SHA-256 of the token                               | A dump of `sessions` yields nothing usable. **Defence in depth — ASVS 5.0 has no requirement for this, so no requirement id is claimed.** A fast hash is correct here: the input already has 256 bits of entropy, so there is nothing to brute-force |
+| Idle timeout     | 14 days                                            | See risk analysis below                                                                                                                                                                                                                              |
+| Absolute timeout | 90 days                                            | Caps a stolen token that is kept warm by use                                                                                                                                                                                                         |
+| Rotation         | New token on every authentication, old one revoked | ASVS V7.2.4 — both halves: mint new **and** terminate old. Kills session fixation                                                                                                                                                                    |
+| Revocation       | Server-side, immediate                             | `revoked_at` checked on every validation                                                                                                                                                                                                             |
 
 ### Risk analysis for the timeout values (ASVS V7.1.1)
 
@@ -53,7 +53,7 @@ behind device biometrics. The dominant realistic threat to a live session is an
 and which no application-level timeout meaningfully improves on.
 
 Against that, the cost of aggressive timeouts is concrete: this is a
-*glanceable* cash-allocation app whose whole purpose is to make "what's free to
+_glanceable_ cash-allocation app whose whole purpose is to make "what's free to
 spend" cheap to check. A login wall on every open trains the operator to stop
 opening it, which defeats the application's reason to exist and pushes them
 back to guessing at a bank balance — the exact failure mode described in §2 of
@@ -103,7 +103,7 @@ own included — could serve one context's response into another.
 
 **The webhook route is deliberately exempt.** Plaid is a server: no `Origin`,
 no `Sec-Fetch-Site`, no custom header. Its authorization is the ES256
-signature, verified before the body is parsed. It is mounted *before* the CSRF
+signature, verified before the body is parsed. It is mounted _before_ the CSRF
 middleware in `src/index.ts`, which is load-bearing.
 
 ## 4. Cryptography
@@ -111,21 +111,21 @@ middleware in `src/index.ts`, which is load-bearing.
 All Web Crypto. **Never `Math.random()`** — `src/crypto/random.ts` is the single
 audit point for every secret value.
 
-| Use | Construction |
-|---|---|
-| Passwords | PBKDF2-HMAC-SHA256, 600,000 iterations (current OWASP recommendation), 16-byte salt, 256-bit output. Parameters travel with the hash, so cost can be raised and old hashes transparently upgraded on next login |
-| Field encryption | AES-256-GCM, **unique random 96-bit IV per encryption**, AAD bound to the row id, versioned envelope `v1.<iv>.<ct>` |
-| Session tokens | 256-bit CSPRNG, SHA-256 at rest |
-| Webhook verification | ECDSA P-256 / SHA-256 (ES256), raw r‖s signature |
-| Constant-time compare | Native `crypto.subtle.timingSafeEqual` where available, portable XOR fallback otherwise |
+| Use                   | Construction                                                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Passwords             | PBKDF2-HMAC-SHA256, 600,000 iterations (current OWASP recommendation), 16-byte salt, 256-bit output. Parameters travel with the hash, so cost can be raised and old hashes transparently upgraded on next login |
+| Field encryption      | AES-256-GCM, **unique random 96-bit IV per encryption**, AAD bound to the row id, versioned envelope `v1.<iv>.<ct>`                                                                                             |
+| Session tokens        | 256-bit CSPRNG, SHA-256 at rest                                                                                                                                                                                 |
+| Webhook verification  | ECDSA P-256 / SHA-256 (ES256), raw r‖s signature                                                                                                                                                                |
+| Constant-time compare | Native `crypto.subtle.timingSafeEqual` where available, portable XOR fallback otherwise                                                                                                                         |
 
 Notes that are easy to get wrong and are therefore encoded in the code:
 
 - **Argon2id would be the first choice** but Web Crypto offers only PBKDF2 from
   that family. Shipping a WASM Argon2 would add a large audited-dependency
   surface to the most security-critical path. PBKDF2 at 600k is the sanctioned
-  fallback. *(Node's `crypto` is now available on Workers by default at
-  compatibility dates ≥ 2026-08-04, but it does not implement argon2 either.)*
+  fallback. _(Node's `crypto` is now available on Workers by default at
+  compatibility dates ≥ 2026-08-04, but it does not implement argon2 either.)_
 - **GCM IV reuse is worse than CTR IV reuse.** Besides revealing the plaintext
   XOR, a repeated `(key, IV)` leaks the GHASH subkey, allowing **tag forgery**
   under that key. With random 96-bit IVs the birthday bound caps safe use near
@@ -265,7 +265,7 @@ hashing it gives exactly the wanted semantics. Enforced by a unique index plus
 both proceed.
 
 Verification failures return **401** (an authorization failure Plaid should not
-retry). A *retryable* failure — Plaid's own key endpoint being down — returns
+retry). A _retryable_ failure — Plaid's own key endpoint being down — returns
 **503** instead, because the webhook may be perfectly valid and a 401 there
 would tell Plaid to stop, losing a legitimate sync notification for good.
 

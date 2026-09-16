@@ -1,7 +1,7 @@
 # Spike results
 
-Blueprint §18.3 — *"Plaid business-account coverage for the actual banks — a
-per-institution go/no-go... Not answerable in advance."*
+Blueprint §18.3 — _"Plaid business-account coverage for the actual banks — a
+per-institution go/no-go... Not answerable in advance."_
 
 This file is where the answer gets recorded. It is a **template with nothing
 filled in**, because neither spike has been run against live Plaid yet.
@@ -19,15 +19,15 @@ export PLAID_CLIENT_ID=... PLAID_SECRET=... PLAID_ENV=sandbox
 npm run spike:plaid 2>&1 | tee -a docs/spike-a-output.txt
 ```
 
-| Assumption | Result | Notes |
-|---|---|---|
-| A1 — money IN is a NEGATIVE Plaid amount | ☐ | The single most consequential fact. If this fails, `mapper.ts` is inverted and so is the whole waterfall. |
-| A2 — sync returns added / modified / removed; `removed` is objects | ☐ | |
-| A3 — posted `transaction_id` differs from `pending_transaction_id` | ☐ | The premise for `txn_key`. |
-| A4 — `next_cursor` durable; empty string means "not ready" | ☐ | |
-| A5 — `available` can be null | ☐ | Must never render as spendable. |
-| A6 — recurring/get entitlement | ☐ | **Paid add-on.** If not entitled, §9 is blocked before Slice 4. |
-| A7 — `reset_login` → `ITEM_LOGIN_REQUIRED`; update mode repairs | ☐ | |
+| Assumption                                                         | Result | Notes                                                                                                     |
+| ------------------------------------------------------------------ | ------ | --------------------------------------------------------------------------------------------------------- |
+| A1 — money IN is a NEGATIVE Plaid amount                           | ☐      | The single most consequential fact. If this fails, `mapper.ts` is inverted and so is the whole waterfall. |
+| A2 — sync returns added / modified / removed; `removed` is objects | ☐      |                                                                                                           |
+| A3 — posted `transaction_id` differs from `pending_transaction_id` | ☐      | The premise for `txn_key`.                                                                                |
+| A4 — `next_cursor` durable; empty string means "not ready"         | ☐      |                                                                                                           |
+| A5 — `available` can be null                                       | ☐      | Must never render as spendable.                                                                           |
+| A6 — recurring/get entitlement                                     | ☐      | **Paid add-on.** If not entitled, §9 is blocked before Slice 4.                                           |
+| A7 — `reset_login` → `ITEM_LOGIN_REQUIRED`; update mode repairs    | ☐      |                                                                                                           |
 
 **Date run:**
 **Plaid API version:** `2020-09-14`
@@ -60,9 +60,9 @@ export PLAID_ENV=production
 npm run spike:coverage -- --banks "<the real banks>" --markdown >> docs/SPIKE-RESULTS.md
 ```
 
-| Institution | ID | Transactions | OAuth | Verdict |
-|---|---|---|---|---|
-| _(not yet run)_ | | | | |
+| Institution     | ID  | Transactions | OAuth | Verdict |
+| --------------- | --- | ------------ | ----- | ------- |
+| _(not yet run)_ |     |              |       |         |
 
 > A "GO" in Part 1 means the institution supports the Transactions product. It
 > does **not** confirm that Plaid can see this entity's business accounts.
@@ -124,9 +124,9 @@ Institution:
 
 ## Action items surfaced by the spikes
 
-| Item | Owner | Blocking |
-|---|---|---|
-| Request the **Recurring Transactions add-on** from Plaid — it is a paid add-on and Transactions does not grant it | Operator | Slice 4 (§9 is mandatory) |
-| Run Spike A with sandbox credentials | Operator | Confidence in the boundary |
-| Run Spike B Part 1 + Part 2 for each real bank | Operator | Closing §18.3 |
-| Confirm `days_requested: 730` is honored per institution | Spike B step 3 | Slice 3 (seasonal baseline) |
+| Item                                                                                                              | Owner          | Blocking                    |
+| ----------------------------------------------------------------------------------------------------------------- | -------------- | --------------------------- |
+| Request the **Recurring Transactions add-on** from Plaid — it is a paid add-on and Transactions does not grant it | Operator       | Slice 4 (§9 is mandatory)   |
+| Run Spike A with sandbox credentials                                                                              | Operator       | Confidence in the boundary  |
+| Run Spike B Part 1 + Part 2 for each real bank                                                                    | Operator       | Closing §18.3               |
+| Confirm `days_requested: 730` is honored per institution                                                          | Spike B step 3 | Slice 3 (seasonal baseline) |

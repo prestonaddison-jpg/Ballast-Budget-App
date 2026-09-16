@@ -17,19 +17,35 @@ hangs off — rendered several hundred pixels below the fold and was **never
 visible in any build**. 234 tests passed the entire time. It was found by
 opening the app in a browser, which nobody had done.
 
-So, before reporting any UI work as done:
+So there are two suites, and they answer different questions:
 
 ```bash
-npm run build
-npx wrangler dev --port 8787 --local &      # needs .dev.vars; see below
-node scripts/seed-preview.mjs && npx wrangler d1 execute ballast-db --local --file=/tmp/ballast-seed.sql
-node scripts/check-layout.mjs               # asserts layout in a real browser
-node scripts/capture-preview.mjs            # screenshots both themes — LOOK AT THEM
+npm test          # workerd: the money model, the Worker, the ledger
+npm run test:e2e  # real browser, iPhone size, both themes, real Worker + D1
+npm run test:all  # typecheck + both
 ```
 
-`check-layout.mjs` is not optional and it is not a nice-to-have. It is the only
-thing in this repo that can see a layout bug. Add to it when you find a class of
-defect it would have missed.
+`npm run test:e2e` builds, migrates, seeds and serves by itself — no setup
+steps to remember. Each test re-seeds, so every one starts from the same
+figures ($18,420 available, $16,900 spoken for, $1,520 free) and can assert
+exact amounts. Auth is a seeded session cookie, not the login form, because the
+login route is rate limited to 10 per window and would 429 the eleventh test.
+
+`npm run test:e2e:ui` opens the Playwright UI for stepping through a failure.
+
+**Both suites run in CI on every push** (`.github/workflows/ci.yml`), the
+browser job across Chromium and WebKit. WebKit is the one that matters — Ballast
+is installed to the iOS Home Screen, so Safari's engine is the real target.
+
+When you find a defect this suite would have missed, add a test for that class
+of defect before you fix it.
+
+For looking at the app rather than asserting on it:
+
+```bash
+node scripts/capture-preview.mjs   # screenshots both themes into preview/
+node scripts/build-artifact.mjs    # one self-contained page for sharing
+```
 
 ## Cost discipline
 

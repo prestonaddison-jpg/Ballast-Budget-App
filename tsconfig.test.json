@@ -5,11 +5,7 @@
     // Tests straddle two runtimes: global-setup.ts runs in Node, everything
     // else runs inside workerd. Both type sets are loaded here so a single
     // typecheck covers the whole test tree.
-    "types": [
-      "@cloudflare/workers-types",
-      "@cloudflare/vitest-pool-workers/types",
-      "node"
-    ],
+    "types": ["@cloudflare/workers-types", "@cloudflare/vitest-pool-workers/types", "node"],
     "noEmit": true
   },
   // MUST be restated. `exclude` is INHERITED from the base config, which

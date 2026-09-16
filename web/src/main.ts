@@ -568,6 +568,9 @@ function renderCanvas(body: HTMLElement) {
   grid.append(
     createZoneGrid({
       zones: groupIntoZones(tiles),
+      // Unallocated is the SOURCE of a fund, never its destination, and there
+      // is nothing to fund from when it is empty or unknown.
+      isSelectable: (envelope) => envelope.type !== 'unallocated' && fundable,
       onSelect: (envelope) => {
         // Unallocated is the SOURCE of a fund, never its destination, so it is
         // not a control. createEnvelopeTile renders non-interactive tiles as

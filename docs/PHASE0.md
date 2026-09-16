@@ -11,17 +11,17 @@ concretely, what was deliberately left out, and what the spikes found.
 
 ## 1. What is built
 
-| Deliverable | Where | Notes |
-|---|---|---|
-| Worker (BFF) | `src/index.ts` | Hono router; serves API and the PWA shell from **one origin** |
-| Custom cookie session | `src/auth/` | 256-bit opaque token, SHA-256 at rest, `__Host-` prefix, idle + absolute timeouts, rotation on auth, server-side revocation |
-| D1 tables | `migrations/0001_phase0_init.sql` | identity, entities, connections, webhook intake, sync runs, audit log |
-| PWA shell | `web/` | manifest, service worker, iOS home-screen meta, safe-area insets |
-| Atelier / Graphite theme | `web/src/styles/` | token contract + shared component layer verbatim from Appendix A, plus the Praeclarus signature |
-| The five components | `web/src/components/` | gauge-done-right, Now-Bar, focal alert, freshness, collapsible |
-| `LedgerSource` boundary | `src/ledger-source/` | interface + normalized types; Plaid as the sole implementation |
-| Plaid sandbox spike | `spikes/plaid-sandbox/` | exercises the lifecycle and **asserts the boundary's assumptions** |
-| Real-bank coverage spike | `spikes/bank-coverage/` | automated metadata pass + manual protocol (see §4) |
+| Deliverable              | Where                             | Notes                                                                                                                       |
+| ------------------------ | --------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| Worker (BFF)             | `src/index.ts`                    | Hono router; serves API and the PWA shell from **one origin**                                                               |
+| Custom cookie session    | `src/auth/`                       | 256-bit opaque token, SHA-256 at rest, `__Host-` prefix, idle + absolute timeouts, rotation on auth, server-side revocation |
+| D1 tables                | `migrations/0001_phase0_init.sql` | identity, entities, connections, webhook intake, sync runs, audit log                                                       |
+| PWA shell                | `web/`                            | manifest, service worker, iOS home-screen meta, safe-area insets                                                            |
+| Atelier / Graphite theme | `web/src/styles/`                 | token contract + shared component layer verbatim from Appendix A, plus the Praeclarus signature                             |
+| The five components      | `web/src/components/`             | gauge-done-right, Now-Bar, focal alert, freshness, collapsible                                                              |
+| `LedgerSource` boundary  | `src/ledger-source/`              | interface + normalized types; Plaid as the sole implementation                                                              |
+| Plaid sandbox spike      | `spikes/plaid-sandbox/`           | exercises the lifecycle and **asserts the boundary's assumptions**                                                          |
+| Real-bank coverage spike | `spikes/bank-coverage/`           | automated metadata pass + manual protocol (see §4)                                                                          |
 
 Verification: `npm run typecheck` (3 projects), `npm test` (130 tests, including
 Worker tests against a real D1 in Miniflare), `npm run build`.
@@ -74,14 +74,14 @@ The spike is written as a set of **assertions about assumptions the code already
 depends on**, so a future Plaid change surfaces as a failing spike rather than
 as wrong numbers. It checks seven (A1–A7 in the file header); three matter most:
 
-- **A1 — the sign convention.** Plaid reports *money out as positive and money
-  in as negative*. A deposit is a **negative** number. `mapper.ts` negates it so
+- **A1 — the sign convention.** Plaid reports _money out as positive and money
+  in as negative_. A deposit is a **negative** number. `mapper.ts` negates it so
   the rest of Ballast can use the intuitive convention. Had this gone
   unnoticed, the tax skim would have run on spending and income would have read
   as an outflow.
 - **A3 — transaction identity.** `transaction_id` changes when a pending
   transaction posts. The pending one appears in `removed`, the posted one in
-  `added`, *never* in `modified`. Hence the `txn_key` surrogate.
+  `added`, _never_ in `modified`. Hence the `txn_key` surrogate.
 - **A6 — recurring entitlement.** `/transactions/recurring/get` is a **paid
   add-on** on top of Transactions. Having Transactions in Production does not
   grant it. §9 (the forward-obligations engine) is mandatory, so this
@@ -105,9 +105,9 @@ So the per-institution go/no-go **cannot be fully automated**. It splits:
 
 - **Automated** — does the institution support the `transactions` product, and
   is it OAuth (which determines whether ~12-month consent expiry and the
-  update-mode re-auth flow apply)? `Institution.products` *is* reliable for
+  update-mode re-auth flow apply)? `Institution.products` _is_ reliable for
   `transactions`.
-- **Manual** — does Plaid see *this entity's business accounts*, and is
+- **Manual** — does Plaid see _this entity's business accounts_, and is
   recurring detection good enough on them? Only linking the real account
   answers this. The closest signal, `account.holder_category`, is beta,
   requires account-manager enablement, is nullable, and often returns
@@ -133,7 +133,7 @@ These were settled during Phase 0 and constrain what comes next.
   days to find annual streams. Ballast requests **730** (Plaid's max, and the
   blueprint's "~24 months"). `clampDaysRequested()` enforces the floor and
   ceiling server-side, because the 730 maximum appears only in Plaid's prose
-  docs and is *not* in the SDK types.
+  docs and is _not_ in the SDK types.
 - **D1 has no interactive transactions.** `BEGIN`/`COMMIT` error out. The only
   atomic unit is a single `db.batch([...])`. Slice 1's "approve a proposal
   commits atomically" requirement has to be built around one batch call.
@@ -151,7 +151,7 @@ These were settled during Phase 0 and constrain what comes next.
   situations").
 - **`pending_transaction_id` can be null even when a pending version existed.**
   Plaid matches the two with an ML model that can fail, and some institutions
-  never expose pending transactions. Heuristic matching on amount is *not* the
+  never expose pending transactions. Heuristic matching on amount is _not_ the
   fallback and is deliberately not attempted — Plaid's own example is that a
   restaurant's pending charge excludes the tip while the posted one includes
   it, so a heuristic would mis-merge unrelated transactions.

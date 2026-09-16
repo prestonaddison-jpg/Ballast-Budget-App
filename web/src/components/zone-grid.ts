@@ -12,6 +12,14 @@ export * from '../lib/zones';
 export interface ZoneGridOptions {
   zones: Zone[];
   onSelect?: (envelope: EnvelopeTileModel) => void;
+  /**
+   * Which envelopes are actually tappable. Defaults to all of them.
+   *
+   * Without this, one `onSelect` for the whole grid made EVERY tile a button —
+   * including unallocated, which is the source of a fund and never its
+   * destination. It looked live, animated on press and did nothing.
+   */
+  isSelectable?: (envelope: EnvelopeTileModel) => boolean;
   /** Rendered when every zone is empty. */
   emptyState?: () => Node;
 }
@@ -71,7 +79,10 @@ export function createZoneGrid(opts: ZoneGridOptions): HTMLElement {
     for (const envelope of zone.envelopes) {
       const item = document.createElement('div');
       item.setAttribute('role', 'listitem');
-      item.append(createEnvelopeTile({ envelope, onSelect: opts.onSelect }));
+      const selectable = opts.onSelect != null && (opts.isSelectable?.(envelope) ?? true);
+      item.append(
+        createEnvelopeTile({ envelope, onSelect: selectable ? opts.onSelect : undefined }),
+      );
       grid.append(item);
     }
     section.append(grid);
