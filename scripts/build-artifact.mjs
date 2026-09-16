@@ -21,6 +21,21 @@ const jsFile = files.find((f) => f.endsWith('.js') && !f.endsWith('.map'));
 let css = readFileSync(`${DIST}/${cssFile}`, 'utf8');
 let js = readFileSync(`${DIST}/${jsFile}`, 'utf8');
 
+// The page is served from a single file with no sibling assets, so the
+// self-hosted faces have to travel inside it.
+function inlineFonts(text) {
+  // Vite emits these unquoted, so the quotes are optional in the pattern.
+  return text.replace(/url\(['"]?\/fonts\/([^)'"]+)['"]?\)/g, (whole, file) => {
+    try {
+      const bytes = readFileSync(`/home/user/Ballast-Budget-App/web/public/fonts/${file}`);
+      return `url('data:font/woff2;base64,${bytes.toString('base64')}')`;
+    } catch {
+      return whole;
+    }
+  });
+}
+css = inlineFonts(css);
+
 // Namespace the theme attribute so the host's own data-theme cannot clobber it.
 css = css.replaceAll('data-theme=atelier]', 'data-bt=atelier]');
 css = css.replaceAll('data-theme=graphite]', 'data-bt=graphite]');
