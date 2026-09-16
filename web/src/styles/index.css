@@ -1,3 +1,4 @@
+@import './fonts.css';
 /* Single entry point so index.html carries one stylesheet link and the CSP
  * stays narrow. Order matters: tokens define the contract, the shared
  * component layer consumes it, the app layer composes on top. */

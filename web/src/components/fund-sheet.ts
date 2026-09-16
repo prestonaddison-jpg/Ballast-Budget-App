@@ -31,6 +31,12 @@ export interface FundSheetOptions {
   onConfirm: (amountMinor: number) => Promise<void>;
   onDismiss: () => void;
   /**
+   * Sweep the remainder back to unallocated and archive (§12). Supplied only
+   * when the envelope can actually be completed, so the control is absent
+   * rather than dead when it cannot.
+   */
+  onComplete?: () => Promise<void>;
+  /**
    * True when a rejected `onConfirm` means the SERVER refused — as opposed to
    * the request never completing. Injected rather than imported so this
    * component stays free of the API client, and so the distinction is
@@ -73,7 +79,16 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
   input.inputMode = 'decimal';
   input.autocomplete = 'off';
   input.placeholder = '0.00';
-  input.setAttribute('aria-label', `Amount to move into ${envelope.name}`);
+  input.id = 'fund-amount';
+
+  // A VISIBLE label. The placeholder was the only thing naming this field, and
+  // a placeholder disappears the moment you type — so the one control that
+  // takes a number had no persistent label at all, and its grey-on-surface
+  // contrast was below AA besides.
+  const amountLabel = document.createElement('label');
+  amountLabel.className = 'sheet-field-label';
+  amountLabel.htmlFor = 'fund-amount';
+  amountLabel.textContent = 'Amount';
 
   const chips = document.createElement('div');
   chips.className = 'sheet-chips';
@@ -151,7 +166,38 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
     }
   });
 
-  sheet.append(title, sub, input, chips, message, actions);
+  sheet.append(title, sub, amountLabel, input, chips, message, actions);
+
+  if (opts.onComplete) {
+    const done = document.createElement('button');
+    done.type = 'button';
+    done.className = 'sheet-secondary';
+    done.textContent = 'Mark complete';
+    let armed = false;
+    done.addEventListener('click', async () => {
+      // Two taps. Completing archives the envelope — the money is swept back
+      // to unallocated rather than lost, but the envelope leaves the Canvas,
+      // and that should not happen on one stray tap.
+      if (!armed) {
+        armed = true;
+        done.textContent = 'Sweep it back and close this envelope?';
+        done.classList.add('is-armed');
+        return;
+      }
+      done.disabled = true;
+      done.textContent = 'Closing…';
+      try {
+        await opts.onComplete!();
+      } catch {
+        message.textContent = "That didn't go through.";
+        done.disabled = false;
+        armed = false;
+        done.classList.remove('is-armed');
+        done.textContent = 'Mark complete';
+      }
+    });
+    sheet.append(done);
+  }
   backdrop.append(sheet);
 
   // Dismiss on backdrop tap, but never on a tap inside the sheet.
@@ -159,7 +205,34 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
     if (e.target === backdrop) opts.onDismiss();
   });
   backdrop.addEventListener('keydown', (e) => {
-    if ((e as KeyboardEvent).key === 'Escape') opts.onDismiss();
+    const ev = e as KeyboardEvent;
+    if (ev.key === 'Escape') {
+      opts.onDismiss();
+      return;
+    }
+    if (ev.key !== 'Tab') return;
+
+    // aria-modal="true" tells assistive technology the rest of the page is
+    // unavailable. Without containment that is simply false: Tab walks out of
+    // the dialog and into a Canvas the screen reader has been told is not
+    // there. Recomputed per keypress because the chips and the complete button
+    // come and go.
+    const focusable = [
+      ...sheet.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'),
+    ].filter((el) => el.offsetParent !== null);
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    const active = document.activeElement;
+
+    if (ev.shiftKey && (active === first || !sheet.contains(active))) {
+      ev.preventDefault();
+      last.focus();
+    } else if (!ev.shiftKey && active === last) {
+      ev.preventDefault();
+      first.focus();
+    }
   });
 
   queueMicrotask(() => input.focus());

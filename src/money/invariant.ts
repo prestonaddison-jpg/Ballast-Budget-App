@@ -98,7 +98,12 @@ export function checkInvariant(
     .filter((a) => a.availableMinor == null)
     .map((a) => a.accountId);
 
-  if (unknownAccountIds.length > 0) {
+  // NO BUDGETABLE ACCOUNT AT ALL is also indeterminate, and this is not
+  // pedantry. Summing an empty set gives 0, and the entity would then report a
+  // confident "Safe to spend $0.00" — which reads as "we checked your bank and
+  // there is nothing there", when what actually happened is that no account has
+  // been linked yet. The em-dash path exists for exactly this: we do not know.
+  if (unknownAccountIds.length > 0 || budgetable.length === 0) {
     return {
       status: 'indeterminate',
       envelopeTotalMinor,

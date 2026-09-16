@@ -71,6 +71,16 @@ async function signIn(page) {
   await page.waitForSelector('.sheet', { timeout: 10_000 });
   await page.waitForTimeout(500);
   await shot(page, '04-fund-sheet-atelier');
+
+  // Dismiss, then the new-envelope sheet.
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  await page.evaluate(() => document.querySelector('.scroll')?.scrollTo(0, 99_999));
+  await page.waitForTimeout(300);
+  await page.click('text=+ New envelope');
+  await page.waitForSelector('#new-env-name');
+  await page.waitForTimeout(400);
+  await shot(page, '10-new-envelope');
   await ctx.close();
 }
 

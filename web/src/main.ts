@@ -27,7 +27,15 @@ import {
   readPreference,
   type ThemePreference,
 } from './lib/theme';
-import { api, envelopeApi, ApiError, type EnvelopesResponse, type MeResponse } from './lib/api';
+import {
+  api,
+  envelopeApi,
+  ApiError,
+  type ApiEnvelope,
+  type EnvelopesResponse,
+  type MeResponse,
+} from './lib/api';
+import { PARSE_MESSAGE, parseMoneyToMinor } from './lib/money-input';
 import { createZoneGrid } from './components/zone-grid';
 import { groupIntoZones } from './lib/zones';
 import { createFundSheet } from './components/fund-sheet';
@@ -241,6 +249,21 @@ function openFundSheet(entityId: string, unallocatedId: string, envelope: Envelo
       await refresh();
       announce(`${formatMoney(amountMinor)} set aside for ${envelope.name}.`);
     },
+    // Offered only where it means something: an envelope with money in it that
+    // is not the residual. Absent, rather than dead, everywhere else.
+    onComplete:
+      envelope.type === 'unallocated'
+        ? undefined
+        : async () => {
+            const { sweptMinor } = await envelopeApi.complete(entityId, envelope.id);
+            close();
+            await refresh();
+            announce(
+              sweptMinor > 0
+                ? `${envelope.name} closed. ${formatMoney(sweptMinor)} went back to unallocated.`
+                : `${envelope.name} closed.`,
+            );
+          },
   });
 
   // Focus restore: whatever opened the sheet gets focus back when it closes,
@@ -252,6 +275,134 @@ function openFundSheet(entityId: string, unallocatedId: string, envelope: Envelo
   }
 
   document.body.append(sheet);
+}
+
+/**
+ * New-envelope sheet.
+ *
+ * Without this the Canvas could only ever show envelopes someone had inserted
+ * into D1 by hand — which made the whole money model unreachable from the app
+ * that is supposed to be its only interface.
+ */
+function openNewEnvelopeSheet(entityId: string) {
+  const backdrop = h('div', 'sheet-backdrop');
+  const sheet = h('div', 'sheet');
+  sheet.setAttribute('role', 'dialog');
+  sheet.setAttribute('aria-modal', 'true');
+  sheet.setAttribute('aria-labelledby', 'new-env-title');
+
+  const title = h('h2', 'sheet-title', 'New envelope');
+  title.id = 'new-env-title';
+
+  const nameLabel = h('label', 'sheet-field-label', 'Name');
+  nameLabel.htmlFor = 'new-env-name';
+  const name = h('input', 'sheet-input');
+  name.id = 'new-env-name';
+  name.type = 'text';
+  name.autocomplete = 'off';
+  name.placeholder = 'Alignment rack';
+  name.maxLength = 80;
+
+  const typeLabel = h('div', 'sheet-field-label', 'What kind');
+  const types = h('div', 'sheet-chips');
+  types.setAttribute('role', 'radiogroup');
+  types.setAttribute('aria-label', 'Envelope kind');
+  // 'unallocated' is deliberately absent: it is the residual, created with the
+  // entity, and a second one would make the invariant ambiguous.
+  const KINDS: Array<{ value: ApiEnvelope['type']; label: string }> = [
+    { value: 'tax', label: 'Tax' },
+    { value: 'buffer', label: 'Buffer' },
+    { value: 'save', label: 'Save' },
+    { value: 'spend', label: 'Spend' },
+  ];
+  let kind: ApiEnvelope['type'] = 'save';
+  const kindButtons: HTMLButtonElement[] = [];
+  for (const k of KINDS) {
+    const b = h('button', 'chip', k.label);
+    b.type = 'button';
+    b.setAttribute('role', 'radio');
+    b.setAttribute('aria-checked', String(k.value === kind));
+    b.addEventListener('click', () => {
+      kind = k.value;
+      for (const other of kindButtons) {
+        other.setAttribute('aria-checked', String(other === b));
+        other.classList.toggle('is-on', other === b);
+      }
+    });
+    b.classList.toggle('is-on', k.value === kind);
+    kindButtons.push(b);
+    types.append(b);
+  }
+
+  const targetLabel = h('label', 'sheet-field-label', 'Target (optional)');
+  targetLabel.htmlFor = 'new-env-target';
+  const target = h('input', 'sheet-input money');
+  target.id = 'new-env-target';
+  target.type = 'text';
+  target.inputMode = 'decimal';
+  target.autocomplete = 'off';
+  target.placeholder = '0.00';
+
+  const message = h('p', 'sheet-message');
+  message.setAttribute('role', 'alert');
+
+  const actions = h('div', 'sheet-actions');
+  const cancel = h('button', 'btn-quiet', 'Not now');
+  cancel.type = 'button';
+  const create = h('button', 'btn-primary', 'Create it');
+  create.type = 'button';
+  actions.append(cancel, create);
+
+  const opener = document.activeElement as HTMLElement | null;
+  const close = () => {
+    backdrop.remove();
+    opener?.focus?.();
+  };
+  cancel.addEventListener('click', close);
+
+  create.addEventListener('click', async () => {
+    const trimmed = name.value.trim();
+    if (!trimmed) {
+      message.textContent = 'Give it a name so you recognise it on the Canvas.';
+      name.focus();
+      return;
+    }
+    let targetMinor: number | null = null;
+    if (target.value.trim()) {
+      const parsed = parseMoneyToMinor(target.value);
+      if (!parsed.ok) {
+        message.textContent = PARSE_MESSAGE[parsed.reason];
+        target.focus();
+        return;
+      }
+      targetMinor = parsed.minor;
+    }
+
+    create.disabled = true;
+    create.textContent = 'Creating…';
+    try {
+      await envelopeApi.create(entityId, { name: trimmed, type: kind, targetMinor });
+      close();
+      await refresh();
+      announce(`${trimmed} added.`);
+    } catch (err) {
+      message.textContent =
+        err instanceof ApiError ? err.message : "We couldn't confirm that. Try again.";
+      create.disabled = false;
+      create.textContent = 'Create it';
+    }
+  });
+
+  sheet.append(title, nameLabel, name, typeLabel, types, targetLabel, target, message, actions);
+  backdrop.append(sheet);
+  backdrop.addEventListener('click', (e) => {
+    if (e.target === backdrop) close();
+  });
+  backdrop.addEventListener('keydown', (e) => {
+    if ((e as KeyboardEvent).key === 'Escape') close();
+  });
+  document.body.append(backdrop);
+  queueMicrotask(() => name.focus());
 }
 
 function unallocatedBalance(): number | null {
@@ -293,7 +444,9 @@ function renderHero(): HTMLElement {
   if (entity) hero.append(h('div', 'safe-entity', entity.name));
   hero.append(h('div', 'safe-label', 'Safe to spend'));
 
-  const figure = h('div', 'safe-figure');
+  // The app's headline figure is its h1. It had no heading role at all, so a
+  // screen reader's document outline began at the zone titles.
+  const figure = h('h1', 'safe-figure');
   const sub = h('div', 'safe-sub');
 
   if (s.me.connections.length === 0) {
@@ -409,7 +562,10 @@ function renderCanvas(body: HTMLElement) {
   const unallocated = money.envelopes.find((e) => e.type === 'unallocated');
   const fundable = unallocated != null && (unallocated.balanceMinor ?? 0) > 0;
 
-  body.append(
+  const grid = h('div');
+  body.append(grid);
+
+  grid.append(
     createZoneGrid({
       zones: groupIntoZones(tiles),
       onSelect: (envelope) => {
@@ -421,6 +577,12 @@ function renderCanvas(body: HTMLElement) {
       },
     }),
   );
+
+  const add = h('button', 'btn-quiet', '+ New envelope');
+  add.type = 'button';
+  add.style.cssText = 'width:100%;min-height:var(--tap);margin-top:14px';
+  add.addEventListener('click', () => openNewEnvelopeSheet(money.entityId));
+  body.append(add);
 }
 
 function renderNeeds(body: HTMLElement) {
@@ -602,7 +764,8 @@ function render() {
 
   clear(app);
 
-  const scroll = h('div', 'scroll');
+  const scroll = h('main', 'scroll');
+  scroll.id = 'main';
   const body = h('div', 'body');
 
   if (s.view === 'canvas') scroll.append(renderHero());

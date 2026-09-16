@@ -63,16 +63,36 @@ describe('checkInvariant', () => {
     expect(check.status).toBe('balanced');
   });
 
-  it('handles an entity with no accounts and no envelopes', () => {
+  it('is INDETERMINATE when no budgetable account is linked', () => {
+    // Not 'balanced at $0'. Summing an empty set gives zero, and reporting
+    // that as cash turns "nothing is linked yet" into "we checked your bank
+    // and it is empty" — a confident claim about money, made from no data.
+    // The route turns this into safeToSpendMinor: null and the hero shows an
+    // em dash, which is the honest answer.
     const check = checkInvariant([], []);
-    expect(check.status).toBe('balanced');
-    expect(check.cashTotalMinor).toBe(0);
+    expect(check.status).toBe('indeterminate');
+    expect(check.cashTotalMinor).toBeNull();
   });
 
-  it('flags envelopes against an entity with no cash at all', () => {
+  it('does NOT accuse the operator of over-allocating against cash it cannot see', () => {
+    // Envelopes claim $50 and no budgetable account is linked. The old
+    // behaviour called this 'envelopes_ahead' by $50, which surfaces in the UI
+    // as "Allocations are $50 above the cash actually available" — a scolding
+    // built on an assumed zero. The operator may well have $10,000 in an
+    // account Ballast has not been shown.
     const check = checkInvariant(bal(5_000), []);
+    expect(check.status).toBe('indeterminate');
+    expect(check.driftMinor).toBeNull();
+  });
+
+  it('still reports envelopes_ahead once there IS a balance to compare against', () => {
+    // The guard above must not swallow the real case: a linked account whose
+    // available balance has genuinely fallen below what is allocated.
+    const check = checkInvariant(bal(5_000), [
+      { accountId: 'a', availableMinor: 3_000, budgetable: true },
+    ]);
     expect(check.status).toBe('envelopes_ahead');
-    expect(check.driftMinor).toBe(-5_000);
+    expect(check.driftMinor).toBe(-2_000);
   });
 });
 
