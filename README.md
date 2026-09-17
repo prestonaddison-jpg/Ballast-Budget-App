@@ -117,6 +117,9 @@ those packages are installed — and it is not fixable with `overrides`
 D1, KV and R2 are provisioned and wired into `wrangler.jsonc`. Before the first
 deploy:
 
+`npm run deploy` refuses to run while `wrangler.jsonc` still carries
+development values — see `scripts/check-deploy-config.mjs`.
+
 ```bash
 wrangler login
 wrangler queues create ballast-sync
@@ -125,6 +128,10 @@ npm run gen:key && wrangler secret put FIELD_ENCRYPTION_KEY   # NOT the .dev.var
 wrangler secret put PLAID_CLIENT_ID
 wrangler secret put PLAID_SECRET
 npm run db:migrate:remote
+
+# APP_ORIGIN in wrangler.jsonc must be the https:// origin this Worker serves.
+# Left as http://localhost, the Worker treats itself as local development and
+# ships session cookies WITHOUT the Secure flag. The predeploy check blocks it.
 npm run deploy
 ```
 
