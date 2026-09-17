@@ -9,8 +9,15 @@ envelopes — so "what's actually free to spend" is always honest.
 suggest a transfer, never execute one. The bank is the vault; Ballast is the
 brain.
 
-This repository currently contains **Phase 0** — the skeleton and the spikes.
-See [`docs/PHASE0.md`](docs/PHASE0.md) for exactly what is and is not built.
+**Built:** Phase 0 (Worker, cookie sessions, D1, PWA shell, Atelier/Graphite
+themes, the `LedgerSource` boundary, both spikes) and **Slice 1** — the money
+model and Canvas v1: envelopes, the ledger, the conservation invariant, and
+tap-to-fund.
+
+**Not built:** Slices 2–7 (staging + Needs You inbox, the variable-income
+engine, obligations + projects, receipts, push + onboarding, hardening), and
+the Plaid Link flow — the sync plumbing exists, the connect UI does not.
+See [`docs/PHASE0.md`](docs/PHASE0.md) for the detail.
 
 ---
 
@@ -26,12 +33,31 @@ npm run build                    # build the PWA shell into dist/client
 npm run dev                      # wrangler dev, serving API + shell on one origin
 ```
 
-Verify everything:
+## Verifying
+
+Two suites, and they answer different questions:
 
 ```bash
-npm run typecheck                # Worker, web, and test projects
-npm test                         # 130 tests, incl. real-D1 Worker tests
-npm run build
+npm test          # 235 tests in workerd — the money model, the Worker, the ledger
+npm run test:e2e  # 36 tests in a real browser — iPhone size, both themes, real D1
+npm run test:all  # typecheck + both
+```
+
+`npm test` runs inside **workerd**: no browser, no layout engine, no CSS. It is
+the right tool for the ledger and structurally blind to anything visual. The
+Now-Bar was off-screen in every build for the life of the project while 234 of
+those tests passed. That is what `test:e2e` is for; it builds, migrates, seeds
+and serves by itself.
+
+Both run in CI on every push (`.github/workflows/ci.yml`) — the browser job
+across Chromium and **WebKit**, which is the engine Ballast actually runs in on
+the iOS Home Screen.
+
+To look at the app rather than assert on it:
+
+```bash
+node scripts/capture-preview.mjs   # screenshots both themes into preview/
+node scripts/build-artifact.mjs    # one self-contained page for sharing
 ```
 
 ## The two Phase 0 spikes
@@ -62,13 +88,18 @@ src/                     Cloudflare Worker (BFF)
     txn-key.ts           stable transaction identity + reconcile planning
     sync-loop.ts         pagination + cursor discipline
     plaid/               the sole implementation
-  routes/                auth, me, health, webhook
+  money/                 envelopes, the ledger, the conservation invariant
+  routes/                auth, me, health, webhook, envelopes + transfers
 web/                     PWA shell (Vite, vanilla TS)
+  public/fonts/          the three design-system faces, self-hosted
   src/styles/            Alongside tokens + shared component layer
-  src/components/        gauge, Now-Bar, focal alert, freshness, collapsible
+  src/lib/               pure logic — no DOM, so it is testable in workerd
+  src/components/        tiles, zone grid, fund sheet, Now-Bar, focal alert
 migrations/              D1 schema
 spikes/                  the two Phase 0 spikes
+scripts/                 seeding, screenshots, the shareable demo page
 test/                    unit + Worker (real D1 via Miniflare)
+e2e/                     Playwright — the only suite that can see the app
 docs/                    Phase 0 notes, security decisions, spike results
 ```
 
@@ -80,6 +111,26 @@ docs/                    Phase 0 notes, security decisions, spike results
 peers that npm resolves to their v5 line. The conflict is spurious — none of
 those packages are installed — and it is not fixable with `overrides`
 (verified). The comment in `.npmrc` records this.
+
+## Deploying
+
+D1, KV and R2 are provisioned and wired into `wrangler.jsonc`. Before the first
+deploy:
+
+```bash
+wrangler login
+wrangler queues create ballast-sync
+wrangler queues create ballast-sync-dlq
+npm run gen:key && wrangler secret put FIELD_ENCRYPTION_KEY   # NOT the .dev.vars value
+wrangler secret put PLAID_CLIENT_ID
+wrangler secret put PLAID_SECRET
+npm run db:migrate:remote
+npm run deploy
+```
+
+`FIELD_ENCRYPTION_KEY` encrypts stored Plaid access tokens. Rotating it makes
+every stored token undecryptable and the recovery path is re-linking each
+institution, so generate it once and keep it somewhere durable.
 
 ## Source of truth
 
