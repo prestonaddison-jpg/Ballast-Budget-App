@@ -26,7 +26,8 @@
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "test:all": "npm run typecheck && npm run test && npm run test:e2e",
-    "predeploy": "node scripts/check-deploy-config.mjs"
+    "predeploy": "node scripts/check-deploy-config.mjs",
+    "usage": "node scripts/usage-report.mjs"
   },
   "dependencies": {
     "hono": "^4.13.8"

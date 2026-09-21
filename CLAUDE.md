@@ -49,6 +49,20 @@ node scripts/build-artifact.mjs    # one self-contained page for sharing
 
 ## Cost discipline
 
+`npm run usage` reads the current session's own transcript and prints exactly
+what it has cost — turns, input, cache reads, output. Do not estimate token
+usage or ask the owner to read a progress bar; run it.
+
+MEASURED ON THIS REPO, and it is the whole argument for short sessions: the
+build session that produced Phase 0 and Slice 1 ran **540 turns and
+212,021,785 tokens**. Output — the actual work — was **695,952** of that.
+**203,186,908 was cache_read: the same conversation re-sent to itself, over
+and over.** A 300:1 ratio.
+
+Every turn resends the whole thread. That is why turn 400 costs orders of
+magnitude more than turn 4, and why one fresh session per version is not
+tidiness, it is the entire cost model.
+
 The owner pays per turn. Two things to avoid:
 
 - **Don't ship unverified and fix it later.** That bills the same work two or
