@@ -8,7 +8,7 @@ is on GitHub and on any machine that has ever pulled.
 Keep it current. A stale STATE.md is worse than none, because the next session
 will believe it.
 
-_Last updated: after v4.1.0 + the demo/tap-target fixes (commit `25e3670`)._
+_Last updated: production database migrated and first account created; queue bindings parked until Plaid._
 
 ---
 
@@ -74,13 +74,13 @@ without it, on the proposals and obligations side, is built.
 
 Verified present in the account. IDs match `wrangler.jsonc`.
 
-| Resource | Name                               | ID / note                                                                               |
-| -------- | ---------------------------------- | --------------------------------------------------------------------------------------- |
-| D1       | `ballast-db`                       | `e005e79c-2719-40d2-9837-eb0cdb6738c2` — **schema never applied remotely; it is empty** |
-| KV       | `ballast-cache`                    | `c8581f3bdedf465d9c79ac957ca8546a`                                                      |
-| R2       | `ballast-receipts`                 | exists                                                                                  |
-| Queues   | `ballast-sync`, `ballast-sync-dlq` | **Existence unconfirmed** — no listing tool available. Likely absent.                   |
-| Worker   | `ballast`                          | **Does not exist yet.** The account's `ballast-finance-app` is an unrelated Worker.     |
+| Resource | Name                               | ID / note                                                                                                                                                                  |
+| -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1       | `ballast-db`                       | `e005e79c-2719-40d2-9837-eb0cdb6738c2` — **MIGRATED.** 13 tables + `envelope_balances`; `d1_migrations` records 0001-0003. One user, one entity, one unallocated envelope. |
+| KV       | `ballast-cache`                    | `c8581f3bdedf465d9c79ac957ca8546a`                                                                                                                                         |
+| R2       | `ballast-receipts`                 | exists                                                                                                                                                                     |
+| Queues   | `ballast-sync`, `ballast-sync-dlq` | **Existence unconfirmed, and now PARKED** — the bindings are commented out of `wrangler.jsonc` until Plaid, because a deploy fails on a queue that does not exist.         |
+| Worker   | `ballast`                          | **Does not exist yet.** The account's `ballast-finance-app` is an unrelated Worker.                                                                                        |
 
 ---
 
@@ -97,9 +97,10 @@ Verified present in the account. IDs match `wrangler.jsonc`.
    reused from `.dev.vars`. Rotating it later makes every stored Plaid access
    token permanently undecryptable — the only recovery is re-linking every
    institution by hand.
-4. **There is no way to create the first user.** Even a perfect deploy has no
-   account to log in with. The first `users` row has to be inserted directly
-   (Claude can do this through the Cloudflare D1 connector).
+4. ~~There is no way to create the first user.~~ **Done** — the first account
+   exists in production. There is still no sign-up route and no
+   password-change screen, so a second user, or a new password, means another
+   direct insert until that is built.
 5. **CI does not gate deploys.** GitHub Actions and Cloudflare do not talk to
    each other, so a red test suite will not stop a deploy.
 

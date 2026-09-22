@@ -20,8 +20,16 @@ const here = dirname(fileURLToPath(import.meta.url));
  * `npm test` should not depend on anyone having remembered to build first.
  */
 function ensureShellBuilt() {
-  if (existsSync(resolve(here, '../dist/client/index.html'))) return;
-  console.log('[global-setup] dist/client is missing — building the shell first');
+  const index = resolve(here, '../dist/client/index.html');
+  // EXISTS IS NOT ENOUGH. An interrupted build leaves index.html behind as
+  // `<html></html>` — what an HTML parser emits for empty input — and the old
+  // check saw a file and moved on. Three routing tests then failed with
+  // `expected '<html></html>' to contain '<title>Ballast</title>'`, which reads
+  // like a broken Worker rather than a broken build. So the check is for a
+  // sentinel the real document always carries, not for a filename.
+  const built = existsSync(index) && readFileSync(index, 'utf8').includes('<title>Ballast</title>');
+  if (built) return;
+  console.log('[global-setup] dist/client is missing or incomplete — rebuilding the shell');
   execFileSync('npm', ['run', 'build'], { cwd: resolve(here, '..'), stdio: 'inherit' });
 }
 

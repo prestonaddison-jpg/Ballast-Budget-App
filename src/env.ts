@@ -18,8 +18,14 @@ export interface Env {
   CACHE: KVNamespace;
   /** Receipts (Slice 5). Highest-sensitivity tier. */
   RECEIPTS: R2Bucket;
-  /** Sync jobs, so a webhook returns immediately and work happens off-request. */
-  SYNC_QUEUE: Queue<SyncJob>;
+  /**
+   * Sync jobs, so a webhook returns immediately and work happens off-request.
+   *
+   * OPTIONAL, because the binding is commented out of wrangler.jsonc until
+   * Plaid exists — see the note there. Typed honestly rather than as a lie the
+   * compiler would let every caller believe: the one producer must check it.
+   */
+  SYNC_QUEUE?: Queue<SyncJob>;
 
   // --- Vars (wrangler.jsonc) ---
   PLAID_ENV: string;

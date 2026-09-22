@@ -61,22 +61,33 @@
   // Receipts (Slice 5). Highest-sensitivity tier (§16).
   "r2_buckets": [{ "binding": "RECEIPTS", "bucket_name": "ballast-receipts" }],
 
-  "queues": {
-    "producers": [{ "binding": "SYNC_QUEUE", "queue": "ballast-sync" }],
-    "consumers": [
-      {
-        "queue": "ballast-sync",
-        "max_batch_size": 10,
-        "max_batch_timeout": 5,
-        "max_retries": 3,
-        "max_concurrency": 5,
-        "retry_delay": 30,
-        // Without a DLQ, messages that exhaust max_retries are SILENTLY
-        // DISCARDED. For a financial sync pipeline that is data loss.
-        "dead_letter_queue": "ballast-sync-dlq",
-      },
-    ],
-  },
+  // QUEUES ARE COMMENTED OUT FOR THE FIRST DEPLOY, and this is deliberate.
+  //
+  // `wrangler deploy` does NOT create queues — it FAILS if a binding names one
+  // that does not exist, and neither `ballast-sync` nor `ballast-sync-dlq` has
+  // been created in the account. That made this the single most likely cause
+  // of a first build failing, for a feature nothing can reach yet: the only
+  // producer is the Plaid webhook route, and there is no Plaid account.
+  //
+  // Put this block back together with Plaid, AFTER creating both queues in the
+  // dashboard (Workers & Pages > Queues > Create queue). The DLQ is not
+  // optional when it returns: without it, messages that exhaust max_retries
+  // are SILENTLY DISCARDED, which for a financial sync pipeline is data loss.
+  //
+  // "queues": {
+  //   "producers": [{ "binding": "SYNC_QUEUE", "queue": "ballast-sync" }],
+  //   "consumers": [
+  //     {
+  //       "queue": "ballast-sync",
+  //       "max_batch_size": 10,
+  //       "max_batch_timeout": 5,
+  //       "max_retries": 3,
+  //       "max_concurrency": 5,
+  //       "retry_delay": 30,
+  //       "dead_letter_queue": "ballast-sync-dlq",
+  //     },
+  //   ],
+  // },
 
   // Sync sweep. Webhooks are the real-time signal; cron is the safety net for
   // a webhook that never arrived (§15).

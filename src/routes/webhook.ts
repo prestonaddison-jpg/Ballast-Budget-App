@@ -132,7 +132,16 @@ webhookRoutes.post('/plaid', async (c) => {
     switch (event.kind) {
       case 'sync_available': {
         const job: SyncJob = { itemId: item.id, userId: item.user_id, trigger: 'webhook' };
-        await env.SYNC_QUEUE.send(job);
+        if (env.SYNC_QUEUE) {
+          await env.SYNC_QUEUE.send(job);
+        } else {
+          // The queue binding is absent until Plaid ships (see wrangler.jsonc).
+          // Recorded rather than thrown: the webhook has already been verified
+          // and deduped, and answering 500 would make the provider retry a
+          // delivery there is nothing to do with. The cron sweep is the safety
+          // net for exactly this — a signal that arrived with nowhere to go.
+          console.warn('sync_available dropped: no SYNC_QUEUE binding', { itemId: item.id });
+        }
         break;
       }
       case 'recurring_updated': {
