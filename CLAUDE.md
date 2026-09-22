@@ -74,9 +74,26 @@ build session that produced Phase 0 and Slice 1 ran **540 turns and
 **203,186,908 was cache_read: the same conversation re-sent to itself, over
 and over.** A 300:1 ratio.
 
-Every turn resends the whole thread. That is why turn 400 costs orders of
-magnitude more than turn 4, and why one fresh session per version is not
-tidiness, it is the entire cost model.
+Every turn resends the whole thread, which is where that ratio comes from.
+
+CORRECTION, measured later in the same transcript. An earlier version of this
+paragraph said "turn 400 costs orders of magnitude more than turn 4". That is
+wrong, and it was wrong when it was written. At 777 turns the transcript read
+280,614,174 tokens — so the stretch from turn 540 to turn 777 cost 68,592,389
+across 237 turns, or **289k per turn against the 393k lifetime average**.
+LOWER, not higher, because the session was compacted partway through and the
+context reset.
+
+So context growth is bounded by compaction, and a long session does not
+compound the way that sentence implied. What IS true is the ratio: 96% of
+every session is the conversation re-sent to itself, which makes a turn
+expensive regardless of where in the session it falls. Fewer, better turns is
+the lever. A fresh session per version still helps — a compaction is a lossy
+summary, and starting clean beats working from one — but it is a preference,
+not the two-orders-of-magnitude emergency this file used to claim.
+
+Measure before repeating any of this. `npm run usage` is right there, and the
+first version of this paragraph is what guessing looks like.
 
 The owner pays per turn. Two things to avoid:
 
