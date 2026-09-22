@@ -104,3 +104,51 @@ test.describe('the fund sheet', () => {
     await expect(app.locator('.sheet')).toHaveCount(0);
   });
 });
+
+test.describe('tap targets inside an open dialog', () => {
+  /**
+   * The 44px check above runs on the Canvas, with nothing open over it. Every
+   * sheet in the app was therefore unmeasured — and `.sheet-secondary`
+   * ("Mark complete", the control that ARCHIVES an envelope) turned out to
+   * have no CSS rule at all, so it rendered at the browser's default ~21px.
+   *
+   * A class name used in markup with no stylesheet behind it is the same
+   * defect as `--ctrlln`: no parse error, no console warning, nothing to see
+   * unless you measure it. So the measurement now follows the dialogs.
+   */
+  const tooSmall = (app: import('@playwright/test').Page) =>
+    app.evaluate(() =>
+      [...document.querySelectorAll('.sheet button, .sheet a[href], .sheet input')]
+        .filter((el) => (el as HTMLElement).offsetParent !== null)
+        .map((el) => ({
+          label: (el.textContent || el.getAttribute('aria-label') || el.tagName)
+            .trim()
+            .slice(0, 30),
+          height: Math.round(el.getBoundingClientRect().height),
+        }))
+        .filter((b) => b.height > 0 && b.height < 44),
+    );
+
+  test('the fund sheet', async ({ app }) => {
+    await app.locator('.tile', { hasText: 'Tax' }).first().click();
+    await expect(app.locator('.sheet')).toBeVisible();
+    expect(await tooSmall(app), 'fund-sheet controls below 44px').toEqual([]);
+  });
+
+  test('the new-envelope sheet', async ({ app }) => {
+    await app.evaluate(() => document.querySelector('.scroll')!.scrollTo(0, 99_999));
+    await app.getByRole('button', { name: '+ New envelope' }).click();
+    await expect(app.locator('.sheet')).toBeVisible();
+    expect(await tooSmall(app), 'new-envelope controls below 44px').toEqual([]);
+  });
+
+  test('the proposal edit sheet', async ({ app }) => {
+    await app.click('.nowbar .nb[data-key="needs"]');
+    await app
+      .locator('.proposal', { hasText: 'Waterfall' })
+      .getByRole('button', { name: /^Change the amount/ })
+      .click();
+    await expect(app.locator('.sheet')).toBeVisible();
+    expect(await tooSmall(app), 'edit-sheet controls below 44px').toEqual([]);
+  });
+});

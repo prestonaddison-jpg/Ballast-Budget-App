@@ -298,6 +298,44 @@
   color: var(--ink);
 }
 
+/* --- "Mark complete" -----------------------------------------------------
+ * The class was used in the markup and DEFINED NOWHERE, so this button fell
+ * back to the browser's default and rendered 21px tall — half the Fitts
+ * minimum the rest of the app holds to, on the one control that archives an
+ * envelope. Nothing caught it because the 44px check only ever ran on the
+ * Canvas, with no dialog open.
+ *
+ * Quiet and separated rather than a third peer of Not now / Set it aside:
+ * it is a different KIND of act — it closes the envelope rather than moving
+ * money into it — and Hick's law says the two primary choices should not have
+ * to compete with it for attention. */
+.sheet-secondary {
+  width: 100%;
+  min-height: var(--tap);
+  margin-top: 4px;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--cardln);
+  border-radius: 0;
+  background: transparent;
+  color: var(--soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+}
+
+/* Armed by the first tap, asking for the second. --watch, never --bad:
+   completing an envelope is a normal, successful end to it, and the sweep
+   returns the money rather than losing it. */
+.sheet-secondary.is-armed {
+  color: var(--watch);
+  font-weight: 650;
+}
+.sheet-secondary:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* --- Over-allocation notice ---------------------------------------------
  * The one place the Canvas uses --bad, and it earns it: allocations exceed
  * the cash that actually exists. That is a real problem, not "not yet full". */

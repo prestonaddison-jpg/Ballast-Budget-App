@@ -53,11 +53,24 @@ function readStylesheets(): Record<string, string> {
   );
 }
 
+/**
+ * Source files the tests reason about as TEXT rather than by importing.
+ *
+ * Read in Node for the same reason the stylesheets are: Vite's `?raw` returns
+ * an empty string for some of these, and build-artifact.mjs is a Node script
+ * that cannot be imported into workerd at all.
+ */
+function readSources(): Record<string, string> {
+  const wanted = ['web/src/lib/api.ts', 'scripts/build-artifact.mjs'];
+  return Object.fromEntries(wanted.map((f) => [f, readFileSync(resolve(here, '..', f), 'utf8')]));
+}
+
 export default async function setup(project: TestProject) {
   ensureShellBuilt();
   const migrations = await readD1Migrations(resolve(here, '../migrations'));
   project.provide('migrations', migrations);
   project.provide('stylesheets', readStylesheets());
+  project.provide('sources', readSources());
 }
 
 declare module 'vitest' {
@@ -65,5 +78,7 @@ declare module 'vitest' {
     migrations: Awaited<ReturnType<typeof readD1Migrations>>;
     /** Every file under web/src/styles, by filename. */
     stylesheets: Record<string, string>;
+    /** Selected source files, by repo-relative path. */
+    sources: Record<string, string>;
   }
 }
