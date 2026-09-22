@@ -37,6 +37,21 @@ login route is rate limited to 10 per window and would 429 the eleventh test.
 browser job across Chromium and WebKit. WebKit is the one that matters — Ballast
 is installed to the iOS Home Screen, so Safari's engine is the real target.
 
+**You cannot run WebKit in this container.** The Playwright CDN is blocked by
+the network policy, so `npx playwright install webkit` fails with a 403 and
+`npm run test:e2e` locally means Chromium only. CI is the sole WebKit signal —
+so a local green is a partial result, and a push is not finished until the
+WebKit job reports.
+
+It has already caught one engine-specific defect. `page.route()` does NOT
+intercept requests that pass through a controlling service worker in WebKit,
+only in Chromium — and `sw.ts` calls `clients.claim()`, so it controls the page
+after the first load. A `route.abort()` on `/api/…` silently did nothing: the
+request went to the network, the app loaded fine, and the test measured a
+healthy app while claiming to measure a broken one. `test.use({ serviceWorkers:
+'block' })` takes the worker out of the path. If you inject a fault, assert
+that the injection fired.
+
 When you find a defect this suite would have missed, add a test for that class
 of defect before you fix it.
 

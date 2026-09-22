@@ -97,24 +97,63 @@ test('the Now-Bar pill counts the queue, and keeps counting it down', async ({ a
   await expect(app.locator('.nowbar')).toContainText('Nothing needs you');
 });
 
-test('the queue never claims all-clear when it could not be loaded', async ({ app }) => {
-  // "Nothing needs you" is a CLAIM. Making it out of a request that failed is
-  // the same lie as a fabricated balance, and it is the exact defect the
-  // three-state money model was introduced to kill.
-  await app.route('**/api/entities/*/proposals', (route) => route.abort('failed'));
-  // Navigation between views repaints from state; only a boot refetches.
-  await app.reload();
-  await expect(app.locator('.canvas')).toBeVisible();
+test.describe('when the queue cannot be loaded', () => {
+  /**
+   * SERVICE WORKERS OFF FOR THESE TESTS ONLY, and the reason is not cosmetic.
+   *
+   * Ballast's service worker calls `clients.claim()`, so after the first load
+   * it controls the page. Playwright does NOT intercept requests that pass
+   * through a controlling service worker in WebKit — only in Chromium. So
+   * `route.abort()` silently did nothing here: the request went to the network,
+   * the queue loaded, and the pill read "2 need you".
+   *
+   * That is exactly the shape of failure this repo keeps paying for — green in
+   * the engine that is convenient, broken in the one that ships. Ballast runs
+   * on the iOS Home Screen, so WebKit IS the target, and a fault-injection
+   * mechanism that only works in Chromium is not a test.
+   *
+   * Blocking the worker takes it out of the request path in both engines. It
+   * is sound here because the service worker is not what is under test, and it
+   * never touches /api/ anyway — `isNeverCacheable` passes every API request
+   * straight through without `respondWith`, so the app's behaviour with the
+   * worker blocked is the same behaviour, minus the interception blind spot.
+   */
+  test.use({ serviceWorkers: 'block' });
 
-  // The pill is the claim that is visible from every screen, so it is the one
-  // that must not say all-clear.
-  await expect(app.locator('.nowbar')).not.toContainText('Nothing needs you');
-  await expect(app.locator('.nowbar')).toContainText("Couldn't load the queue");
+  test('the queue never claims all-clear when it could not be loaded', async ({ app }) => {
+    // "Nothing needs you" is a CLAIM. Making it out of a request that failed is
+    // the same lie as a fabricated balance, and it is the exact defect the
+    // three-state money model was introduced to kill.
+    await app.route('**/api/entities/*/proposals', (route) => route.abort('failed'));
+    // Navigation between views repaints from state; only a boot refetches.
+    await app.reload();
+    await expect(app.locator('.canvas')).toBeVisible();
 
-  await app.click('.nowbar .nb[data-key="needs"]');
-  await expect(app.getByText("Couldn't load what needs you")).toBeVisible();
-  // And no empty queue pretending to be an empty queue.
-  await expect(app.locator('.proposal')).toHaveCount(0);
+    // The pill is the claim that is visible from every screen, so it is the one
+    // that must not say all-clear.
+    await expect(app.locator('.nowbar')).not.toContainText('Nothing needs you');
+    await expect(app.locator('.nowbar')).toContainText("Couldn't load the queue");
+
+    await app.click('.nowbar .nb[data-key="needs"]');
+    await expect(app.getByText("Couldn't load what needs you")).toBeVisible();
+    // And no empty queue pretending to be an empty queue.
+    await expect(app.locator('.proposal')).toHaveCount(0);
+  });
+
+  test('the abort actually aborts — the mechanism itself is asserted', async ({ app }) => {
+    // The bug above was NOT a wrong expectation: it was fault injection that
+    // did nothing while the assertion quietly measured a healthy app. So the
+    // interception is now verified directly, and this test fails loudly in any
+    // engine where route() stops reaching the request.
+    let intercepted = 0;
+    await app.route('**/api/entities/*/proposals', (route) => {
+      intercepted += 1;
+      return route.abort('failed');
+    });
+    await app.reload();
+    await expect(app.locator('.canvas')).toBeVisible();
+    expect(intercepted, 'route() never saw the queue request').toBeGreaterThan(0);
+  });
 });
 
 test('the screen has exactly one heading, and it says where you are', async ({ app }) => {

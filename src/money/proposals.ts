@@ -334,3 +334,57 @@ export async function expireProposals(db: D1Database, now: number): Promise<{ ex
     .run();
   return { expired: result.meta.changes ?? 0 };
 }
+
+export type EditResult =
+  { ok: true; amountMinor: Minor } | { ok: false; reason: 'not_found' | 'not_pending' | 'expired' };
+
+/**
+ * Change a pending proposal's amount.
+ *
+ * §4 calls proposals EDITABLE, and the reason is visible the moment a
+ * suggestion stops fitting: a $2,400 waterfall against $1,520 of free cash is
+ * otherwise a dead end where the only move is to decline something the
+ * operator actually wants. Editing turns it into "approve the part that fits".
+ *
+ * DELIBERATELY NOT BALANCE-CHECKED, for the same reason createProposal is not.
+ * The amount here is still an intent, and the only check that decides anything
+ * is the one folded into approveProposal's insert. Validating against the
+ * balance HERE would be a second, weaker copy of that rule that could disagree
+ * with it — and the operator may well be editing an amount they intend to
+ * approve after the next sync lands.
+ *
+ * One guarded statement: the status and the expiry are read inside the write,
+ * so an edit cannot land on a proposal that was approved a moment earlier and
+ * silently rewrite what the ledger already committed.
+ */
+export async function editProposal(
+  db: D1Database,
+  input: { userId: string; proposalId: string; amountMinor: Minor; now: number },
+): Promise<EditResult> {
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new MoneyError('invalid_amount', 'Amount must be a positive whole number of cents.');
+  }
+
+  const result = await db
+    .prepare(
+      `UPDATE proposals
+          SET amount_minor = ?3
+        WHERE id = ?1 AND user_id = ?2
+          AND status = 'pending'
+          AND (expires_at IS NULL OR expires_at > ?4)`,
+    )
+    .bind(input.proposalId, input.userId, input.amountMinor, input.now)
+    .run();
+
+  if ((result.meta.changes ?? 0) === 1) return { ok: true, amountMinor: input.amountMinor };
+
+  // Nothing changed. Say WHY, so the screen can be specific rather than
+  // reporting a generic failure for three quite different situations.
+  const row = await findProposal(db, input.userId, input.proposalId);
+  if (!row) return { ok: false, reason: 'not_found' };
+  if (row.status !== 'pending') return { ok: false, reason: 'not_pending' };
+  if (row.expires_at != null && row.expires_at <= input.now)
+    return { ok: false, reason: 'expired' };
+  // Same amount as it already held: the UPDATE was a no-op, not a refusal.
+  return { ok: true, amountMinor: row.amount_minor };
+}
