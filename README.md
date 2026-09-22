@@ -25,6 +25,20 @@ does not. See [`docs/PHASE0.md`](docs/PHASE0.md) for the detail.
 
 ---
 
+## Where things stand
+
+Two files carry the state of this project across sessions and machines, so
+nothing depends on a conversation still being open:
+
+- **[`docs/STATE.md`](docs/STATE.md)** — what is built, what is blocked, what
+  the next move is, and the defects this codebase keeps producing.
+- **[`docs/DEPLOY.md`](docs/DEPLOY.md)** — how it gets live and stays live,
+  verified against the live Cloudflare account.
+
+Read [`CLAUDE.md`](CLAUDE.md) before changing anything.
+
+---
+
 ## Quick start
 
 ```bash
