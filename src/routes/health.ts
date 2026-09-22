@@ -11,7 +11,7 @@ import type { Env } from '../env';
 import { isLocalDev } from '../env';
 import { json } from '../http/responses';
 
-export const VERSION = '3.1.0';
+export const VERSION = '3.1.1';
 
 export const healthRoutes = new Hono<{ Bindings: Env }>();
 

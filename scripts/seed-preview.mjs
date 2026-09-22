@@ -158,6 +158,69 @@ for (const pr of proposals) {
   );
 }
 
+/* -------------------------------------------------------------------------
+ * A SECOND ENTITY.
+ *
+ * Ballast's central claim is that the Praeclarus entities never commingle —
+ * and until now the preview had exactly one entity, so that claim was proved
+ * by unit tests and by nothing a browser had ever seen. One entity cannot mix
+ * with anything.
+ *
+ * The figures are deliberately unmistakable ($2,500 free against $1,520) and
+ * BOTH entities have an envelope called "Tax". A same-named envelope is
+ * exactly what a commingling bug hides behind: a leak of the wrong entity's
+ * tile is invisible when every name is unique, and glaring when one is not.
+ *
+ * Named to sort AFTER the repair shop, because listEntities is ORDER BY name
+ * and the Canvas opens on entities[0] — reordering it would rewrite the
+ * figures every other test asserts.
+ * ---------------------------------------------------------------------- */
+const entityBId = id('ent');
+const itemBId = id('itm');
+const HOLDINGS = 400_000; // $4,000.00
+
+const envelopesB = [
+  { key: 'unalloc', name: 'Unallocated', type: 'unallocated', target: null, funded: 0 },
+  // Same name as the repair shop's. On purpose — see above.
+  { key: 'tax', name: 'Tax', type: 'tax', target: 500_000, funded: 100_000 },
+  { key: 'dist', name: 'Distributions', type: 'save', target: 2_000_000, funded: 50_000 },
+];
+for (const e of envelopesB) e.id = id('env');
+const byKeyB = Object.fromEntries(envelopesB.map((e) => [e.key, e]));
+
+sql.push(
+  `INSERT INTO entities (id,user_id,name,state,created_at,updated_at) VALUES (${q(entityBId)},${q(userId)},${q('Praeclarus Holdings LLC')},'TX',${NOW},${NOW});`,
+);
+sql.push(
+  `INSERT INTO source_items (id,user_id,source_item_id,access_token_enc,institution_name,status,last_synced_at,created_at,updated_at)
+   VALUES (${q(itemBId)},${q(userId)},${q(id('plaid'))},'preview-not-a-real-token',${q('Frost')},'ok',${SYNCED},${NOW},${NOW});`,
+);
+sql.push(
+  `INSERT INTO source_accounts (id,user_id,item_id,entity_id,source_account_id,name,type,subtype,available_minor,current_minor,budgetable,balance_updated_at,created_at,updated_at)
+   VALUES (${q(id('acc'))},${q(userId)},${q(itemBId)},${q(entityBId)},${q(id('pacc'))},${q('Holdings operating')},'depository','checking',${HOLDINGS},${HOLDINGS},1,${SYNCED},${NOW},${NOW});`,
+);
+
+let orderB = 0;
+for (const e of envelopesB) {
+  sql.push(
+    `INSERT INTO envelopes (id,user_id,entity_id,name,type,target_minor,sort_order,created_at,updated_at)
+     VALUES (${q(e.id)},${q(userId)},${q(entityBId)},${q(e.name)},${q(e.type)},${e.target ?? 'NULL'},${orderB++},${NOW},${NOW});`,
+  );
+}
+for (const e of envelopesB) {
+  if (e.type === 'unallocated' || e.funded <= 0) continue;
+  sql.push(
+    `INSERT INTO ledger_entries (id,user_id,entity_id,from_envelope_id,to_envelope_id,amount_minor,kind,memo,created_at)
+     VALUES (${q(id('led'))},${q(userId)},${q(entityBId)},${q(byKeyB.unalloc.id)},${q(e.id)},${e.funded},'fund',${q('Preview seed')},${NOW});`,
+  );
+}
+// One proposal, so the queue count differs between the entities too — a pill
+// that does not change on a switch is the same leak wearing a different hat.
+sql.push(
+  `INSERT INTO proposals (id,user_id,entity_id,kind,from_envelope_id,to_envelope_id,amount_minor,status,memo,created_at)
+   VALUES (${q(id('prp'))},${q(userId)},${q(entityBId)},'tax_skim',${q(byKeyB.unalloc.id)},${q(byKeyB.tax.id)},31_000,'pending',${q('Quarterly estimate')},${NOW});`,
+);
+
 // A ready-made session, so the suite never touches the login route.
 sql.push(
   `INSERT INTO sessions (id,user_id,token_hash,created_at,last_seen_at,absolute_expires_at)
@@ -173,4 +236,10 @@ const named = envelopes.reduce((n, e) => n + e.funded, 0);
 console.log(`seed written  ·  cash $${(CASH / 100).toLocaleString()}`);
 console.log(`              ·  named $${(named / 100).toLocaleString()}`);
 console.log(`              ·  unallocated (residual) $${((CASH - named) / 100).toLocaleString()}`);
+
+const namedB = envelopesB.reduce((n, e) => n + e.funded, 0);
+console.log(`second entity ·  cash $${(HOLDINGS / 100).toLocaleString()}`);
+console.log(
+  `              ·  unallocated (residual) $${((HOLDINGS - namedB) / 100).toLocaleString()}`,
+);
 console.log(`login: ${EMAIL} / ${PASSWORD}`);

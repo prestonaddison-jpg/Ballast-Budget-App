@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // The browser suite runs in a REAL browser, so DOM is the right lib and
+    // @cloudflare/workers-types is emphatically not: its `Element` is
+    // HTMLRewriter's, and it shadows the DOM one inside every page.evaluate()
+    // callback. That is the same collision that keeps web/src out of
+    // tsconfig.test.json, and the reason this is a third project rather than
+    // another include path on an existing one.
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "noEmit": true
+  },
+  // Restated, because `exclude` is inherited from the base config and filters
+  // the results of `include` — without this every file below is dropped and
+  // the project typechecks nothing at all.
+  "exclude": ["node_modules", "dist"],
+  "include": ["e2e/**/*.ts", "playwright.config.ts"]
+}

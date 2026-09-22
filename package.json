@@ -1,6 +1,6 @@
 {
   "name": "ballast",
-  "version": "3.1.0",
+  "version": "3.1.1",
   "private": true,
   "type": "module",
   "description": "Read-only, Plaid-connected, multi-entity business cash-allocation PWA.",
@@ -12,7 +12,7 @@
     "dev:web": "vite dev --config web/vite.config.ts",
     "build": "npm run build:web",
     "build:web": "vite build --config web/vite.config.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p tsconfig.test.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p web/tsconfig.json && tsc --noEmit -p tsconfig.test.json && tsc --noEmit -p tsconfig.e2e.json",
     "test": "vitest run",
     "test:watch": "vitest",
     "format": "prettier --write .",

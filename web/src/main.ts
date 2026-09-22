@@ -50,7 +50,7 @@ import { createProposalCard } from './components/proposal-card';
 import { createProposalEditSheet } from './components/proposal-edit-sheet';
 import { queuePillText } from './lib/proposal-copy';
 
-export const VERSION = '3.1.0';
+export const VERSION = '3.1.1';
 
 const app = document.getElementById('app')!;
 
