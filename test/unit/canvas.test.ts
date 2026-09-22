@@ -129,3 +129,72 @@ describe('the tile, when the bank has reported nothing', () => {
     expect(view.captionText).toBe('0% of $400');
   });
 });
+
+describe('the tile, when an envelope has a deadline', () => {
+  /** 2026-03-15, mid-afternoon local. */
+  const NOW = new Date(2026, 2, 15, 14, 30);
+
+  it('says how full AND when, on one line', () => {
+    // Two facts, one glance. Separate rows would double the tile height for no
+    // added meaning, and the tile is the surface an operator scans.
+    const view = presentTile(
+      env({ balanceMinor: 2800_00, targetMinor: 7500_00, targetDate: '2026-03-27' }),
+      NOW,
+    );
+    expect(view.captionText).toBe('37% of $7,500 · due in 12 days');
+  });
+
+  it('keeps percentage-of-target framing, never a shortfall', () => {
+    const view = presentTile(
+      env({ balanceMinor: 100_00, targetMinor: 1000_00, targetDate: '2026-03-16' }),
+      NOW,
+    );
+    // Same arithmetic, opposite emotional register. "short by $900, due
+    // tomorrow" is the sentence that makes someone stop opening the app.
+    expect(view.captionText).toBe('10% of $1,000 · due tomorrow');
+    expect(view.captionText).not.toMatch(/short|need|behind|only/i);
+  });
+
+  it('shows the date even with no target at all', () => {
+    // "Due on the 15th" is useful before anyone has decided what it costs.
+    const view = presentTile(env({ targetMinor: null, targetDate: '2026-03-15' }), NOW);
+    expect(view.captionText).toBe('due today');
+    expect(view.progressPercent).toBeNull();
+  });
+
+  it('shows the date even when the BALANCE is unknown', () => {
+    // The bill is no less due because the bank has gone quiet, and hiding it
+    // would be the app choosing what the operator gets to worry about.
+    const view = presentTile(
+      env({ type: 'unallocated', balanceMinor: null, targetDate: '2026-03-13' }),
+      NOW,
+    );
+    expect(view.captionText).toBe('waiting on your bank · overdue 2d');
+    expect(view.amountText).toBe('—');
+  });
+
+  it('says nothing about a date it cannot read', () => {
+    // A stored value we cannot parse is not a deadline we may assert. The
+    // caption falls back to progress alone rather than inventing a day.
+    const view = presentTile(
+      env({ balanceMinor: 2800_00, targetMinor: 7500_00, targetDate: 'next tuesday' }),
+      NOW,
+    );
+    expect(view.captionText).toBe('37% of $7,500');
+    expect(view.dueTone).toBeNull();
+  });
+
+  it('is unchanged for an envelope with no date', () => {
+    const view = presentTile(env({ balanceMinor: 2800_00, targetMinor: 7500_00 }), NOW);
+    expect(view.captionText).toBe('37% of $7,500');
+    expect(view.dueTone).toBeNull();
+  });
+
+  it('reports tone for emphasis, and never reaches for --bad itself', () => {
+    const tone = (targetDate: string) => presentTile(env({ targetDate }), NOW).dueTone;
+    expect(tone('2026-03-13')).toBe('past');
+    expect(tone('2026-03-15')).toBe('today');
+    expect(tone('2026-03-20')).toBe('soon');
+    expect(tone('2026-05-01')).toBe('later');
+  });
+});

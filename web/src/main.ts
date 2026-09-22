@@ -48,9 +48,11 @@ import { createCollapsible } from './components/collapsible';
 import { createNowBar, type NavKey } from './components/nowbar';
 import { createProposalCard } from './components/proposal-card';
 import { createProposalEditSheet } from './components/proposal-edit-sheet';
+import { trapFocus } from './lib/dialog-trap';
+import { isValidDateString, relativeDateChoices, dueText } from './lib/due-date';
 import { queuePillText } from './lib/proposal-copy';
 
-export const VERSION = '3.1.1';
+export const VERSION = '4.0.0';
 
 const app = document.getElementById('app')!;
 
@@ -391,6 +393,45 @@ function openNewEnvelopeSheet(entityId: string) {
   target.autocomplete = 'off';
   target.placeholder = '0.00';
 
+  /* --- Due by ------------------------------------------------------------
+   * §13: "Setup uses one-tap relative chips... never date-typing." The chips
+   * are the path; the date field is the escape hatch for the one obligation
+   * that lands on an awkward day. A form that opens on an empty date input is
+   * a form an ADHD operator closes again.
+   * -------------------------------------------------------------------- */
+  const dueLabel = h('div', 'sheet-field-label', 'Due by (optional)');
+  const dueChips = h('div', 'sheet-chips');
+  const due = h('input', 'sheet-input');
+  due.id = 'new-env-due';
+  due.type = 'date';
+  due.setAttribute('aria-label', 'Due date');
+
+  const dueEcho = h('p', 'soft sheet-note');
+  // Reads the choice back in the words the tile will use, so "2026-03-15" is
+  // confirmed as "due in 12 days" before it is committed rather than after.
+  const echoDue = () => {
+    const phrase = due.value ? dueText(due.value) : null;
+    dueEcho.textContent = phrase ? `Shows as "${phrase}".` : '';
+  };
+  due.addEventListener('input', echoDue);
+
+  for (const choice of relativeDateChoices()) {
+    const chip = h('button', 'chip', choice.label);
+    chip.type = 'button';
+    chip.addEventListener('click', () => {
+      // A second tap on the chosen chip clears it. Without that the only way
+      // to undo a mis-tap is to clear a date field by hand, which is the
+      // typing the chips exist to avoid.
+      const already = due.value === choice.value;
+      due.value = already ? '' : choice.value;
+      for (const other of dueChips.children) {
+        other.classList.toggle('is-on', !already && other === chip);
+      }
+      echoDue();
+    });
+    dueChips.append(chip);
+  }
+
   const message = h('p', 'sheet-message');
   message.setAttribute('role', 'alert');
 
@@ -425,11 +466,23 @@ function openNewEnvelopeSheet(entityId: string) {
       }
       targetMinor = parsed.minor;
     }
+    // The Worker refuses a date it cannot read, which is correct — but being
+    // told that after a round trip is worse than being told before it.
+    if (due.value && !isValidDateString(due.value)) {
+      message.textContent = 'That due date is not a real date.';
+      due.focus();
+      return;
+    }
 
     create.disabled = true;
     create.textContent = 'Creating…';
     try {
-      await envelopeApi.create(entityId, { name: trimmed, type: kind, targetMinor });
+      await envelopeApi.create(entityId, {
+        name: trimmed,
+        type: kind,
+        targetMinor,
+        targetDate: due.value || null,
+      });
       close();
       await refresh();
       announce(`${trimmed} added.`);
@@ -441,14 +494,27 @@ function openNewEnvelopeSheet(entityId: string) {
     }
   });
 
-  sheet.append(title, nameLabel, name, typeLabel, types, targetLabel, target, message, actions);
+  sheet.append(
+    title,
+    nameLabel,
+    name,
+    typeLabel,
+    types,
+    targetLabel,
+    target,
+    dueLabel,
+    dueChips,
+    due,
+    dueEcho,
+    message,
+    actions,
+  );
   backdrop.append(sheet);
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) close();
-  });
-  backdrop.addEventListener('keydown', (e) => {
-    if ((e as KeyboardEvent).key === 'Escape') close();
-  });
+  // This sheet claimed aria-modal="true" and had NO focus containment: Tab
+  // walked straight out into a Canvas that assistive technology had been told
+  // was unavailable. Third sheet, same defect — which is why the trap is now
+  // one shared implementation rather than three hand-written ones.
+  trapFocus({ backdrop, sheet, onDismiss: close });
   document.body.append(backdrop);
   queueMicrotask(() => name.focus());
 }

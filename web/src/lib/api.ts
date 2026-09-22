@@ -119,7 +119,13 @@ export const envelopeApi = {
 
   create: (
     entityId: string,
-    body: { name: string; type: ApiEnvelope['type']; targetMinor?: number | null },
+    body: {
+      name: string;
+      type: ApiEnvelope['type'];
+      targetMinor?: number | null;
+      /** 'YYYY-MM-DD'. The Worker refuses anything else rather than storing it. */
+      targetDate?: string | null;
+    },
   ) =>
     request<{ id: string }>(`/api/entities/${encodeURIComponent(entityId)}/envelopes`, {
       method: 'POST',

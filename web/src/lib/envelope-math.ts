@@ -6,6 +6,8 @@
  * them without wading through element construction.
  */
 
+import { daysUntil as dueDays, dueText, dueTone, type DueTone } from './due-date';
+
 export type EnvelopeType = 'unallocated' | 'buffer' | 'tax' | 'spend' | 'save';
 
 export interface EnvelopeTileModel {
@@ -108,6 +110,13 @@ export interface TilePresentation {
   progressPercent: number | null;
   /** The line under the amount, or null for none. */
   captionText: string | null;
+  /**
+   * How close the obligation is, or null when it has no date.
+   *
+   * Emphasis only. It is deliberately NOT a colour decision on its own: §14
+   * forbids red for ordinary states, and a bill due on Friday is ordinary.
+   */
+  dueTone: DueTone | null;
 }
 
 /**
@@ -117,9 +126,19 @@ export interface TilePresentation {
  * built twice in the component, because the one time they drifted apart the
  * screen-reader version was the one that went wrong and nobody noticed.
  */
-export function presentTile(envelope: EnvelopeTileModel): TilePresentation {
+export function presentTile(
+  envelope: EnvelopeTileModel,
+  // Injected so the caption is a pure function of its inputs. A module reading
+  // the wall clock cannot be tested for "due tomorrow" without waiting a day.
+  now: Date = new Date(),
+): TilePresentation {
   const { balanceMinor, targetMinor, currency, type } = envelope;
   const fraction = fundedFraction(balanceMinor, targetMinor);
+
+  // Null for no date AND for an unparseable one — a stored value we cannot
+  // read is not a deadline we may assert. See daysUntil.
+  const due = dueText(envelope.targetDate, now);
+  const days = due == null ? null : dueDays(envelope.targetDate, now);
 
   if (balanceMinor == null) {
     return {
@@ -131,7 +150,11 @@ export function presentTile(envelope: EnvelopeTileModel): TilePresentation {
       // No bar. A 0% bar is a claim about how full the envelope is, and that
       // is precisely the claim we cannot make.
       progressPercent: null,
-      captionText: 'waiting on your bank',
+      // The date still belongs on screen. The balance being unknown does not
+      // make the bill any less due, and hiding it would be the app choosing
+      // what the operator gets to worry about.
+      captionText: due ? `waiting on your bank · ${due}` : 'waiting on your bank',
+      dueTone: days == null ? null : dueTone(days),
     };
   }
 
@@ -139,7 +162,12 @@ export function presentTile(envelope: EnvelopeTileModel): TilePresentation {
     amountText: formatMoney(balanceMinor, currency),
     amountLabel: formatMoneyExact(balanceMinor, currency),
     progressPercent: fraction == null ? null : Math.round(fraction * 100),
-    captionText:
+    captionText: caption(),
+    dueTone: days == null ? null : dueTone(days),
+  };
+
+  function caption(): string | null {
+    const progress =
       fraction != null && targetMinor != null
         ? // Percentage-of-target, never "short by". Same arithmetic, opposite
           // emotional register — and the shortfall framing is the one that
@@ -147,6 +175,13 @@ export function presentTile(envelope: EnvelopeTileModel): TilePresentation {
           `${Math.round(fraction * 100)}% of ${formatMoney(targetMinor, currency)}`
         : type === 'unallocated'
           ? 'ready to allocate'
-          : null,
-  };
+          : null;
+
+    // Progress and deadline are ONE line, not two. A tile is a glance, and the
+    // two facts an operator needs about an obligation are how full it is and
+    // when it lands — separating them onto their own rows doubles the tile
+    // height for no added meaning.
+    if (progress && due) return `${progress} · ${due}`;
+    return progress ?? due;
+  }
 }

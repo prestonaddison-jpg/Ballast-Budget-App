@@ -67,12 +67,43 @@ const OPERATING = 1_642_000; // $16,420.00
 const SAVINGS = 200_000; //  $2,000.00
 const CASH = OPERATING + SAVINGS; // $18,420.00
 
+/**
+ * Due dates are seeded RELATIVE to the real clock, not as fixed strings.
+ *
+ * Row timestamps are frozen so re-seeding is deterministic, but a frozen
+ * DEADLINE would drift into the past and the preview would open on an overdue
+ * bill that is only overdue because the seed is old. Relative keeps "due in 12
+ * days" meaning twelve days, forever.
+ */
+const inDays = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  const pad = (x) => String(x).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
 const envelopes = [
   { key: 'unalloc', name: 'Unallocated', type: 'unallocated', target: null, funded: 0 },
   { key: 'tax', name: 'Tax', type: 'tax', target: 900_000, funded: 620_000 },
   { key: 'buffer', name: 'Buffer', type: 'buffer', target: 1_200_000, funded: 450_000 },
-  { key: 'rack', name: 'Alignment rack', type: 'save', target: 750_000, funded: 280_000 },
-  { key: 'ins', name: 'Q1 insurance', type: 'spend', target: 340_000, funded: 340_000 },
+  // A part-funded obligation with a deadline: the case the due-date work
+  // exists for, and the one that reads worst if the app stays silent about it.
+  {
+    key: 'rack',
+    name: 'Alignment rack',
+    type: 'save',
+    target: 750_000,
+    funded: 280_000,
+    due: inDays(12),
+  },
+  {
+    key: 'ins',
+    name: 'Q1 insurance',
+    type: 'spend',
+    target: 340_000,
+    funded: 340_000,
+    due: inDays(3),
+  },
 ];
 for (const e of envelopes) e.id = id('env');
 const byKey = Object.fromEntries(envelopes.map((e) => [e.key, e]));
@@ -109,8 +140,8 @@ sql.push(account(acctSavings, 'Reserve savings', 'savings', SAVINGS));
 let order = 0;
 for (const e of envelopes) {
   sql.push(
-    `INSERT INTO envelopes (id,user_id,entity_id,name,type,target_minor,sort_order,created_at,updated_at)
-     VALUES (${q(e.id)},${q(userId)},${q(entityId)},${q(e.name)},${q(e.type)},${e.target ?? 'NULL'},${order++},${NOW},${NOW});`,
+    `INSERT INTO envelopes (id,user_id,entity_id,name,type,target_minor,target_date,sort_order,created_at,updated_at)
+     VALUES (${q(e.id)},${q(userId)},${q(entityId)},${q(e.name)},${q(e.type)},${e.target ?? 'NULL'},${e.due ? q(e.due) : 'NULL'},${order++},${NOW},${NOW});`,
   );
 }
 

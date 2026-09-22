@@ -22,6 +22,7 @@ import {
 } from '../money/ledger';
 import { ENVELOPE_TYPES, MoneyError, type EnvelopeType } from '../money/types';
 import { checkInvariant, safeToSpend } from '../money/invariant';
+import { isValidDateString } from '../money/dates';
 import { audit } from '../db/repos/audit';
 
 export const envelopeRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
@@ -151,13 +152,23 @@ envelopeRoutes.post('/:entityId/envelopes', async (c) => {
     return error(400, 'bad_request', 'A target must be a positive whole number of cents.', ctx);
   }
 
+  // REFUSED, not coerced and not silently dropped. `typeof x === 'string'`
+  // was the whole check here, so "next tuesday" went into the column and then
+  // vanished from every screen: the operator set a deadline, the app took it,
+  // and afterwards did not have it.
+  if (body.targetDate != null && !isValidDateString(body.targetDate)) {
+    return error(400, 'bad_request', 'A due date must be a real date, as YYYY-MM-DD.', ctx);
+  }
+  // A date with no target is legitimate — "this is due on the 15th" is useful
+  // even before anyone decides how much it costs.
+
   const { id } = await createEnvelope(c.env.DB, {
     userId: session.userId,
     entityId,
     name,
     type,
     targetMinor,
-    targetDate: typeof body.targetDate === 'string' ? body.targetDate : null,
+    targetDate: isValidDateString(body.targetDate) ? body.targetDate : null,
     zone: typeof body.zone === 'string' ? body.zone : null,
     now,
   });

@@ -347,3 +347,74 @@ describe('POST complete', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('POST envelopes · the due date', () => {
+  let a: Actor;
+  beforeEach(async () => {
+    a = await actor();
+  });
+
+  const create = (body: Record<string, unknown>) =>
+    call(a, `/api/entities/${a.entityId}/envelopes`, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'Q1 insurance', type: 'spend', ...body }),
+    });
+
+  const dateOf = async (id: string) =>
+    (
+      await env.DB.prepare('SELECT target_date FROM envelopes WHERE id = ?')
+        .bind(id)
+        .first<{ target_date: string | null }>()
+    )?.target_date ?? null;
+
+  it('stores a real date', async () => {
+    const res = await create({ targetDate: '2026-03-15' });
+    expect(res.status).toBe(201);
+    expect(await dateOf(((await res.json()) as { id: string }).id)).toBe('2026-03-15');
+  });
+
+  it('REFUSES anything it could not read back', async () => {
+    // THE DEFECT THIS EXISTS FOR. `typeof x === 'string'` was the whole check,
+    // so "next tuesday" went into the column, nothing failed, and the date
+    // simply never appeared on screen again: the operator set a deadline, the
+    // app accepted it, and afterwards did not have it.
+    for (const targetDate of [
+      'next tuesday',
+      '03/15/2026',
+      '2026-3-5',
+      '2026-02-30', // shape is fine; the day does not exist
+      '2026-13-01',
+      '2026-03-15T00:00:00Z',
+      '',
+      42,
+    ]) {
+      const res = await create({ targetDate });
+      expect(res.status, JSON.stringify(targetDate)).toBe(400);
+    }
+  });
+
+  it('refuses a date that Date() would silently roll over', async () => {
+    // new Date('2026-02-30') becomes March 2nd. Accepting it would turn a typo
+    // into a confident wrong deadline rather than a rejected one.
+    expect((await create({ targetDate: '2026-02-30' })).status).toBe(400);
+    expect((await create({ targetDate: '2028-02-29' })).status).toBe(201); // leap year
+  });
+
+  it('allows no date at all', async () => {
+    expect((await create({})).status).toBe(201);
+    expect((await create({ targetDate: null })).status).toBe(201);
+  });
+
+  it('allows a date with no target — "due on the 15th" is useful alone', async () => {
+    const res = await create({ targetDate: '2026-03-15', targetMinor: null });
+    expect(res.status).toBe(201);
+  });
+
+  it('returns the date to the client that will render it', async () => {
+    await create({ targetDate: '2026-03-15' });
+    const body = (await (await call(a, `/api/entities/${a.entityId}/envelopes`)).json()) as {
+      envelopes: Array<{ name: string; targetDate: string | null }>;
+    };
+    expect(body.envelopes.find((e) => e.name === 'Q1 insurance')?.targetDate).toBe('2026-03-15');
+  });
+});
