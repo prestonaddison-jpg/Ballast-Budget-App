@@ -78,6 +78,8 @@ for (const e of envelopes) e.id = id('env');
 const byKey = Object.fromEntries(envelopes.map((e) => [e.key, e]));
 
 const sql = [];
+// Proposals reference both envelopes and ledger_entries, so they go first.
+sql.push('DELETE FROM proposals;');
 sql.push('DELETE FROM ledger_entries;');
 sql.push('DELETE FROM envelopes;');
 sql.push('DELETE FROM source_accounts;');
@@ -119,6 +121,40 @@ for (const e of envelopes) {
   sql.push(
     `INSERT INTO ledger_entries (id,user_id,entity_id,from_envelope_id,to_envelope_id,amount_minor,kind,memo,created_at)
      VALUES (${q(id('led'))},${q(userId)},${q(entityId)},${q(byKey.unalloc.id)},${q(e.id)},${e.funded},'fund',${q('Preview seed')},${NOW});`,
+  );
+}
+
+// Two staged proposals, so the Needs You queue is a real screen rather than an
+// empty one.
+//
+// THESE ARE SEEDED, NOT GENERATED. The triggers that produce proposals from
+// real activity (income detection, unassigned spend, the waterfall) need
+// transaction data, which needs Plaid. Until then the queue is fed from here
+// so the approve path is exercised by the browser suite end to end.
+//
+// The second one is deliberately larger than the $1,520 residual: a proposal
+// that no longer fits is an ordinary, expected state — the balance moved after
+// it was suggested — and the screen has to handle it without an error.
+const proposals = [
+  {
+    kind: 'income_allocation',
+    from: byKey.unalloc.id,
+    to: byKey.tax.id,
+    amount: 48_000,
+    memo: 'Deposit landed Friday',
+  },
+  {
+    kind: 'waterfall',
+    from: byKey.unalloc.id,
+    to: byKey.buffer.id,
+    amount: 240_000,
+    memo: 'Top the buffer toward one month of costs',
+  },
+];
+for (const pr of proposals) {
+  sql.push(
+    `INSERT INTO proposals (id,user_id,entity_id,kind,from_envelope_id,to_envelope_id,amount_minor,status,memo,created_at)
+     VALUES (${q(id('prp'))},${q(userId)},${q(entityId)},${q(pr.kind)},${q(pr.from)},${q(pr.to)},${pr.amount},'pending',${q(pr.memo)},${NOW});`,
   );
 }
 

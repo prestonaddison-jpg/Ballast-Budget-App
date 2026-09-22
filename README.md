@@ -9,15 +9,19 @@ envelopes — so "what's actually free to spend" is always honest.
 suggest a transfer, never execute one. The bank is the vault; Ballast is the
 brain.
 
-**Built:** Phase 0 (Worker, cookie sessions, D1, PWA shell, Atelier/Graphite
-themes, the `LedgerSource` boundary, both spikes) and **Slice 1** — the money
-model and Canvas v1: envelopes, the ledger, the conservation invariant, and
-tap-to-fund.
+**Built (v3.0.0):** Phase 0 (Worker, cookie sessions, D1, PWA shell,
+Atelier/Graphite themes, the `LedgerSource` boundary, both spikes); the money
+model and Canvas v1 (envelopes, the ledger, the conservation invariant,
+tap-to-fund); and the **staging model + Needs You queue** — proposals that
+touch no balance until you approve them, checked against your real balance at
+the moment you approve rather than when they were suggested.
 
-**Not built:** Slices 2–7 (staging + Needs You inbox, the variable-income
-engine, obligations + projects, receipts, push + onboarding, hardening), and
-the Plaid Link flow — the sync plumbing exists, the connect UI does not.
-See [`docs/PHASE0.md`](docs/PHASE0.md) for the detail.
+**Not built:** the triggers that GENERATE proposals from activity (income
+detection, unassigned spend, the waterfall) — they need transaction data, so
+they need Plaid. Until then the queue is fed by the preview seed. Also the
+variable-income engine, obligations + projects, receipts, push + onboarding,
+hardening, and the Plaid Link flow — the sync plumbing exists, the connect UI
+does not. See [`docs/PHASE0.md`](docs/PHASE0.md) for the detail.
 
 ---
 

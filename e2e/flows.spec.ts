@@ -19,7 +19,9 @@ test('the hero shows the residual, and it is not a placeholder', async ({ app })
 test('every Now-Bar destination goes somewhere', async ({ app }) => {
   // All four were rendered as live buttons wired to nothing.
   for (const [key, expected] of [
-    ['needs', 'Needs you'],
+    // The queue's own promise, which is on the screen whether or not anything
+    // is pending — unlike the "Nothing right now" card, which is not.
+    ['needs', 'Nothing here has changed a balance'],
     ['accounts', 'Entities'],
     ['settings', 'Appearance'],
   ] as const) {

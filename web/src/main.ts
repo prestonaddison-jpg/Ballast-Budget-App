@@ -30,8 +30,10 @@ import {
 import {
   api,
   envelopeApi,
+  proposalApi,
   ApiError,
   type ApiEnvelope,
+  type ApiProposal,
   type EnvelopesResponse,
   type MeResponse,
 } from './lib/api';
@@ -44,8 +46,10 @@ import { createFocalAlert } from './components/focal-alert';
 import { createFreshness, computeFreshness } from './components/freshness';
 import { createCollapsible } from './components/collapsible';
 import { createNowBar, type NavKey } from './components/nowbar';
+import { createProposalCard } from './components/proposal-card';
+import { queuePillText } from './lib/proposal-copy';
 
-export const VERSION = '0.1.0-phase0';
+export const VERSION = '3.0.0';
 
 const app = document.getElementById('app')!;
 
@@ -166,12 +170,27 @@ type MoneyState =
   | { status: 'none' }
   | { status: 'error'; message: string };
 
+/**
+ * The Needs You queue, with the same three states and for the same reason.
+ *
+ * A failed fetch must NOT render as an empty queue: "nothing needs you" is a
+ * claim, and making it out of a request that did not come back is the same
+ * confident lie as a fabricated balance.
+ */
+type QueueState =
+  | { status: 'ok'; proposals: ApiProposal[] }
+  | { status: 'none' }
+  | { status: 'error'; message: string };
+
 interface AppState {
   me: MeResponse;
   view: NavKey;
   /** Which entity the Canvas is showing. Entities never commingle (§3). */
   entityId: string | null;
   money: MoneyState;
+  queue: QueueState;
+  /** Proposal ids with a decision in flight, so a second tap cannot fire. */
+  deciding: Set<string>;
 }
 
 let state: AppState | null = null;
@@ -192,11 +211,39 @@ async function loadMoney(entityId: string | null): Promise<MoneyState> {
   }
 }
 
-/** Re-fetch the current entity and repaint. */
+async function loadQueue(entityId: string | null): Promise<QueueState> {
+  if (!entityId) return { status: 'none' };
+  try {
+    const { proposals } = await proposalApi.list(entityId);
+    return { status: 'ok', proposals };
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) throw err;
+    return {
+      status: 'error',
+      message:
+        err instanceof ApiError ? err.message : "Couldn't reach Ballast. Nothing was decided.",
+    };
+  }
+}
+
+/**
+ * Re-fetch the current entity and repaint.
+ *
+ * Both requests, always, and in parallel. Approving a proposal changes a
+ * balance, and funding an envelope changes whether a proposal still fits — so
+ * refreshing one without the other leaves the screen internally inconsistent,
+ * which is how a queue ends up offering an action the Canvas already knows is
+ * impossible.
+ */
 async function refresh() {
   if (!state) return;
   try {
-    state.money = await loadMoney(state.entityId);
+    const [money, queue] = await Promise.all([
+      loadMoney(state.entityId),
+      loadQueue(state.entityId),
+    ]);
+    state.money = money;
+    state.queue = queue;
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) return void boot();
     throw err;
@@ -588,25 +635,130 @@ function renderCanvas(body: HTMLElement) {
   body.append(add);
 }
 
+/**
+ * Decide one proposal.
+ *
+ * The optimism is deliberately ONE-WAY. The card is removed from the queue
+ * immediately so the screen never offers the same decision twice, but no
+ * balance is touched on screen until the server has confirmed — the figures
+ * come from `refresh()`, never from arithmetic done here. Guessing a balance
+ * locally is how a UI ends up disagreeing with the ledger, and in this app the
+ * ledger is the only thing that is true.
+ */
+async function decide(proposal: ApiProposal, action: 'approve' | 'dismiss') {
+  const s = state;
+  if (!s || !s.entityId) return;
+  // A second tap while the first is in flight. The server refuses it anyway —
+  // that is what the idempotency key is for — but a 409 the operator did not
+  // cause should never reach them.
+  if (s.deciding.has(proposal.id)) return;
+
+  s.deciding.add(proposal.id);
+  if (s.queue.status === 'ok') {
+    s.queue = {
+      status: 'ok',
+      proposals: s.queue.proposals.filter((p) => p.id !== proposal.id),
+    };
+  }
+  render();
+
+  try {
+    if (action === 'approve') {
+      await proposalApi.approve(s.entityId, proposal.id);
+      announce(
+        `${formatMoney(proposal.amountMinor)} moved to ${proposal.to.name ?? 'the envelope'}.`,
+      );
+    } else {
+      await proposalApi.dismiss(s.entityId, proposal.id);
+      announce('Dismissed.');
+    }
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 401) return void boot();
+    // Put it back. A proposal that failed to commit is still pending, and
+    // silently dropping it would leave the operator believing they had decided
+    // something they had not.
+    announce(
+      err instanceof ApiError ? err.message : "Couldn't reach Ballast. Nothing was decided.",
+    );
+  } finally {
+    s.deciding.delete(proposal.id);
+    // The authority, either way: whatever the server now says is the queue.
+    await refresh();
+  }
+}
+
 function renderNeeds(body: HTMLElement) {
+  const s = state!;
+
+  // The focal alert outranks the queue. A bank that needs reconnecting makes
+  // every suggestion below it stale, so it is shown first and on its own.
   const alert = focalAlert();
   if (alert) body.append(alert);
-  else {
-    const card = h('section', 'card vitals');
-    card.append(h('div', 'label', 'Needs you'));
-    card.append(h('p', 'soft', 'Nothing right now.'));
-    body.append(card);
+
+  if (s.queue.status === 'error') {
+    body.append(
+      createFocalAlert({
+        title: "Couldn't load what needs you",
+        detail: s.queue.message,
+        action: 'Try again',
+        tone: 'bad',
+        onAction: () => void refresh(),
+      }),
+    );
+    return;
   }
 
-  // Said plainly rather than implied by an empty screen. The queue itself —
-  // staged proposals, receipt prompts, unassigned spend — is Slice 2.
+  const proposals = s.queue.status === 'ok' ? s.queue.proposals : [];
+
+  // The view's h1, always, and carrying the count rather than a static word.
+  // The Canvas's h1 is its hero figure; this screen had no heading element at
+  // all, which leaves a screen-reader user no way to tell where they are.
+  const heading = h(
+    'h1',
+    'label',
+    // "Nothing needs you" is a claim, and it is only ours to make once the
+    // queue has actually been fetched. With no entity selected there is
+    // nothing to have checked.
+    s.queue.status === 'ok' ? queuePillText(proposals.length) : 'Needs you',
+  );
+  heading.style.cssText = 'margin:4px 2px 2px';
+  body.append(heading);
+
+  if (proposals.length === 0) {
+    const card = h('section', 'card vitals');
+    // Only said when it has actually been checked. `status: 'none'` means no
+    // entity is selected, which is not the same as all-clear.
+    card.append(
+      h(
+        'p',
+        'soft',
+        s.queue.status === 'ok'
+          ? 'Nothing right now. Balances are labelled the way you left them.'
+          : 'Select an entity to see what needs you.',
+      ),
+    );
+    card.style.cssText = 'padding:14px 15px';
+    body.append(card);
+  } else {
+    for (const proposal of proposals) {
+      body.append(
+        createProposalCard(proposal, {
+          onApprove: (p) => void decide(p, 'approve'),
+          onDismiss: (p) => void decide(p, 'dismiss'),
+        }),
+      );
+    }
+  }
+
+  // The promise the queue is making, stated rather than implied. It is the
+  // reason this screen can be trusted with an Approve button at all.
   const note = h('section', 'card vitals');
-  note.append(h('div', 'label', 'Coming here'));
+  note.append(h('div', 'label', 'How this works'));
   note.append(
     h(
       'p',
       'soft',
-      'One queue for staged allocations, receipt prompts and unassigned spend. Nothing changes a balance without you approving it.',
+      'Nothing here has changed a balance. Each one is checked against your real balance at the moment you approve it \u2014 not when it was suggested.',
     ),
   );
   body.append(note);
@@ -635,6 +787,11 @@ function renderAccounts(body: HTMLElement) {
         row.addEventListener('click', () => {
           state!.entityId = ent.id;
           state!.view = 'canvas';
+          // The old entity's queue must not survive the switch: showing one
+          // LLC's proposals under another's name is the commingling the whole
+          // app is structured to prevent, and it would be on screen.
+          state!.queue = { status: 'none' };
+          state!.deciding.clear();
           void refresh();
         });
       }
@@ -812,7 +969,15 @@ function render() {
           ? { text: 'Over-allocated', status: 'watch' as const }
           : s.money.status === 'ok' && s.money.data.safeToSpendMinor == null
             ? { text: 'Waiting on your bank', status: 'watch' as const }
-            : { text: 'Nothing needs you', status: 'good' as const };
+            : s.queue.status === 'error'
+              ? { text: "Couldn't load the queue", status: 'bad' as const }
+              : // The count, from the SAME function the Needs You heading
+                // uses. Two places computing "3 need you" independently is
+                // how a pill ends up one decision behind the screen it
+                // describes.
+                s.queue.status === 'ok' && s.queue.proposals.length > 0
+                ? { text: queuePillText(s.queue.proposals.length), status: 'watch' as const }
+                : { text: 'Nothing needs you', status: 'good' as const };
 
   app.append(scroll, createNowBar({ active: s.view, pill, onNavigate: go }));
 
@@ -848,7 +1013,8 @@ async function boot() {
   try {
     const me = await api.me();
     const entityId = me.entities[0]?.id ?? null;
-    state = { me, view: 'canvas', entityId, money: await loadMoney(entityId) };
+    const [money, queue] = await Promise.all([loadMoney(entityId), loadQueue(entityId)]);
+    state = { me, view: 'canvas', entityId, money, queue, deciding: new Set() };
     render();
   } catch (err) {
     if (err instanceof ApiError && err.status === 401) {

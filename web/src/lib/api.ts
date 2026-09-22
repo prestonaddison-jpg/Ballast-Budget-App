@@ -151,3 +151,58 @@ export const envelopeApi = {
       { method: 'POST' },
     ),
 };
+
+/* -------------------------------------------------------------------------
+ * Proposals — the Needs You queue (v3)
+ * ---------------------------------------------------------------------- */
+
+export type ProposalKind =
+  | 'income_allocation'
+  | 'salary_draw'
+  | 'buffer_action'
+  | 'unassigned_spend'
+  | 'tax_skim'
+  | 'waterfall';
+
+export interface ApiProposal {
+  id: string;
+  kind: ProposalKind;
+  amountMinor: number;
+  memo: string | null;
+  createdAt: number;
+  expiresAt: number | null;
+  from: { id: string; name: string | null; type: string | null };
+  to: { id: string; name: string | null; type: string | null };
+  /** NULL when the bank has not reported the source balance. */
+  sourceBalanceMinor: number | null;
+  /**
+   * Advisory. The server re-checks the live balance inside the statement that
+   * commits, so this decides nothing — it exists so the screen can say "this
+   * no longer fits" before the operator taps, rather than after.
+   *
+   * NULL means unknown, and unknown is neither true nor false.
+   */
+  affordableNow: boolean | null;
+}
+
+export interface ProposalsResponse {
+  entityId: string;
+  proposals: ApiProposal[];
+}
+
+export const proposalApi = {
+  list: (entityId: string) =>
+    request<ProposalsResponse>(`/api/entities/${encodeURIComponent(entityId)}/proposals`),
+
+  approve: (entityId: string, proposalId: string) =>
+    request<{ entryId: string; amountMinor: number }>(
+      `/api/entities/${encodeURIComponent(entityId)}/proposals/${encodeURIComponent(proposalId)}/approve`,
+      { method: 'POST' },
+    ),
+
+  dismiss: (entityId: string, proposalId: string) =>
+    request<{ dismissed: boolean }>(
+      `/api/entities/${encodeURIComponent(entityId)}/proposals/${encodeURIComponent(proposalId)}/dismiss`,
+      { method: 'POST' },
+    ),
+};

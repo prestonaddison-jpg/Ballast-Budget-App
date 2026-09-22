@@ -21,6 +21,7 @@ import { authRoutes } from './routes/auth';
 import { healthRoutes } from './routes/health';
 import { meRoutes } from './routes/me';
 import { envelopeRoutes } from './routes/envelopes';
+import { proposalRoutes } from './routes/proposals';
 import { webhookRoutes } from './routes/webhook';
 import { csrfGuard, type AppVariables } from './http/middleware';
 import { error, notFound } from './http/responses';
@@ -76,6 +77,10 @@ app.route('/api/health', healthRoutes);
 app.route('/api/auth', authRoutes);
 app.route('/api/me', meRoutes);
 app.route('/api/entities', envelopeRoutes);
+// Mounted on the same prefix: proposals are scoped to an entity exactly as
+// envelopes are, and splitting them across two prefixes would make the BOLA
+// check look like two different rules.
+app.route('/api/entities', proposalRoutes);
 
 app.notFound((c) => notFound({ secure: !isLocalDev(c.env) }));
 

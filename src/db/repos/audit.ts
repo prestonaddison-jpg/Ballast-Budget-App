@@ -15,6 +15,8 @@ export type AuditAction =
   | 'session.revoked'
   | 'envelope.transfer'
   | 'envelope.completed'
+  | 'proposal.approve'
+  | 'proposal.dismiss'
   | 'item.linked'
   | 'item.reauth_required'
   | 'item.removed'

@@ -111,6 +111,15 @@ async function signIn(page) {
   await page.waitForSelector('.sheet', { timeout: 10_000 });
   await page.waitForTimeout(500);
   await shot(page, '06-fund-sheet-graphite');
+
+  // The Needs You queue in Graphite as well. Its Approve button is the second
+  // control in the app that commits money, and the first one shipped nearly
+  // invisible in this theme — navy on near-navy — so it is looked at in both.
+  await page.keyboard.press('Escape');
+  await page.click('.nowbar .nb[data-key="needs"]');
+  await page.waitForSelector('.proposal', { timeout: 10_000 });
+  await page.waitForTimeout(400);
+  await shot(page, '10-needs-you-graphite');
   await ctx.close();
 }
 

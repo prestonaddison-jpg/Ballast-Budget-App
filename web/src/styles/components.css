@@ -179,3 +179,60 @@
     transition: none !important;
   }
 }
+
+/* --- Proposal card (the Needs You queue) --------------------------------
+ * One staged suggestion. Reads as a statement with an amount, not as a form.
+ *
+ * NOTE THE ABSENCE OF --bad. A proposal that no longer fits is not a failure
+ * and not an error: the bank balance moved, which is ordinary. It gets the
+ * same calm treatment as everything else and simply explains itself. Red here
+ * would teach the operator to dread this screen, which is the one screen the
+ * whole app is trying to get them to open. */
+.proposal {
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.proposal-amount {
+  font-family: var(--display), system-ui, sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.proposal-route {
+  font-size: 0.9rem;
+  color: var(--soft);
+}
+
+.proposal-memo,
+.proposal-blocker {
+  margin: 2px 0 0;
+  font-size: 0.85rem;
+}
+
+/* The explanation that stands in for the Approve button. It has to be legible
+   as a reason, so it takes the secondary ink rather than being dimmed further
+   into the background than the memo above it. */
+.proposal-blocker {
+  color: var(--soft);
+}
+
+.proposal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+/* Sole remaining control on a proposal that cannot be approved. Without this
+   it inherits `flex: 1` and stretches to the full width, which reads as the
+   primary action on a card whose primary action is deliberately absent. */
+.proposal[data-affordability='short'] .proposal-actions .btn-quiet,
+.proposal[data-affordability='unknown'] .proposal-actions .btn-quiet {
+  flex: 0 0 auto;
+  padding: 0 22px;
+}
