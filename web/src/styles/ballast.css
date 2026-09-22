@@ -276,6 +276,13 @@ h3 {
   font-weight: 700;
   color: var(--accent);
   padding-inline: 4px;
+  /* The TITLE wraps, never the action. Once the card started carrying a real
+     sentence ("Alignment rack is due in 12 days") the button was squeezed into
+     a narrow column and broke across two lines, which reads as damage. The
+     title is the information; the button is only the affordance, so the title
+     is what gives way. */
+  flex: none;
+  white-space: nowrap;
 }
 
 /* --- Progressive-disclosure collapsible (A.5) ------------------------------

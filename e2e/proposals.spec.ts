@@ -94,7 +94,14 @@ test('the Now-Bar pill counts the queue, and keeps counting it down', async ({ a
       name: /^Approve/,
     })
     .click();
-  await expect(app.locator('.nowbar')).toContainText('Nothing needs you');
+
+  // NOT "Nothing needs you", and this assertion changed deliberately when
+  // obligations landed. The QUEUE is empty, but the seeded Alignment rack is
+  // 37% funded and due inside the window, so all-clear would be false. The
+  // pill falls through to the next true thing rather than to silence.
+  await expect(app.locator('.proposal')).toHaveCount(0);
+  await expect(app.locator('.nowbar')).not.toContainText('Nothing needs you');
+  await expect(app.locator('.nowbar')).toContainText('Something is due');
 });
 
 test.describe('when the queue cannot be loaded', () => {

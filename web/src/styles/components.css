@@ -105,8 +105,6 @@
 }
 .needs .go {
   margin-left: auto;
-  font-weight: 700;
-  color: var(--accent);
 }
 
 /* grouped vitals (Ballast: an entity's grouped figures) */

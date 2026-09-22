@@ -50,9 +50,10 @@ import { createProposalCard } from './components/proposal-card';
 import { createProposalEditSheet } from './components/proposal-edit-sheet';
 import { trapFocus } from './lib/dialog-trap';
 import { isValidDateString, relativeDateChoices, dueText } from './lib/due-date';
+import { nextObligation, obligationCopy } from './lib/attention';
 import { queuePillText } from './lib/proposal-copy';
 
-export const VERSION = '4.0.0';
+export const VERSION = '4.1.0';
 
 const app = document.getElementById('app')!;
 
@@ -634,7 +635,57 @@ function focalAlert(): HTMLElement | null {
       onAction: () => void refresh(),
     });
   }
+
+  // LAST, because everything above it is a reason the figures cannot be
+  // trusted — and pointing at a deadline computed from stale or missing data
+  // would be the app being confidently helpful about numbers it does not have.
+  const obligation = attention();
+  if (obligation && s.money.status === 'ok') {
+    const copy = obligationCopy(obligation);
+    const unallocated = s.money.data.envelopes.find((e) => e.type === 'unallocated');
+    return createFocalAlert({
+      title: copy.title,
+      detail: copy.detail,
+      action: copy.action,
+      // 'watch', never 'bad'. Being part-way through funding a bill that has
+      // not arrived yet is the ordinary state of a business, not a failure,
+      // and §14 reserves red for things that are actually wrong.
+      tone: obligation.tone === 'past' ? 'bad' : 'watch',
+      // Only offered when there is somewhere for the money to come FROM. With
+      // no unallocated envelope the button would open a sheet that cannot
+      // fund anything — a dead control on the one card the screen emphasises.
+      onAction: unallocated
+        ? () =>
+            openFundSheet(s.money.status === 'ok' ? s.money.data.entityId : '', unallocated.id, {
+              id: obligation.envelope.id,
+              name: obligation.envelope.name,
+              type: obligation.envelope.type,
+              balanceMinor: obligation.envelope.balanceMinor,
+              targetMinor: obligation.envelope.targetMinor,
+              targetDate: obligation.envelope.targetDate,
+              currency: 'USD',
+            })
+        : undefined,
+    });
+  }
   return null;
+}
+
+/** The one obligation worth raising right now, or null. */
+function attention() {
+  const s = state;
+  if (!s || s.money.status !== 'ok') return null;
+  return nextObligation(
+    s.money.data.envelopes.map((e) => ({
+      id: e.id,
+      name: e.name,
+      type: e.type,
+      balanceMinor: e.balanceMinor,
+      targetMinor: e.targetMinor,
+      targetDate: e.targetDate,
+      currency: 'USD',
+    })),
+  );
 }
 
 function renderCanvas(body: HTMLElement) {
@@ -1079,7 +1130,13 @@ function render() {
                 // describes.
                 s.queue.status === 'ok' && s.queue.proposals.length > 0
                 ? { text: queuePillText(s.queue.proposals.length), status: 'watch' as const }
-                : { text: 'Nothing needs you', status: 'good' as const };
+                : // An underfunded bill inside the window is something that
+                  // needs them, so "Nothing needs you" would be false — and
+                  // the pill is visible from every screen, including the one
+                  // showing the card that says otherwise.
+                  attention()
+                  ? { text: 'Something is due', status: 'watch' as const }
+                  : { text: 'Nothing needs you', status: 'good' as const };
 
   app.append(scroll, createNowBar({ active: s.view, pill, onNavigate: go }));
 

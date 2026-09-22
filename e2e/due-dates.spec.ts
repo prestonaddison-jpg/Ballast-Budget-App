@@ -137,3 +137,81 @@ test('a sheet taller than the phone scrolls, and its primary action is reachable
   await app.evaluate(() => document.querySelector('.sheet')!.scrollTo(0, 99_999));
   await expect(app.getByRole('button', { name: 'Create it' })).toBeInViewport({ ratio: 1 });
 });
+
+test.describe('the focal alert points at the deadline', () => {
+  test('names the underfunded obligation and offers to fund it', async ({ app }) => {
+    // Seeded: Alignment rack, 37% of $7,500, due in 12 days — inside the
+    // window and not yet full. Q1 insurance is due in THREE days and would
+    // outrank it on date alone, but it is fully funded, so it is a success
+    // rather than something to raise.
+    const card = app.locator('.needs');
+    await expect(card).toBeVisible();
+    await expect(card).toContainText(/Alignment rack is due in \d+ days/);
+    await expect(card).toContainText('37% of $7,500 set aside so far.');
+    await expect(card).not.toContainText('Q1 insurance');
+  });
+
+  test('never reaches for red on a bill that simply has not arrived yet', async ({ app }) => {
+    // §14 reserves --bad for things that are actually wrong. Being part-way
+    // through funding a future bill is the ordinary state of a business.
+    await expect(app.locator('.needs')).toHaveAttribute('data-tone', 'watch');
+  });
+
+  test('keeps percentage framing on the one card the screen emphasises', async ({ app }) => {
+    const text = (await app.locator('.needs').textContent()) ?? '';
+    expect(text).not.toMatch(/short|behind|you need|you're late|only \$/i);
+  });
+
+  test('its action opens the fund sheet for THAT envelope', async ({ app }) => {
+    // An implementation intention is only one if the tap actually commits.
+    await app
+      .locator('.needs')
+      .getByRole('button', { name: /Set aside/ })
+      .click();
+    await expect(app.locator('.sheet')).toBeVisible();
+    await expect(app.locator('.sheet-title')).toHaveText('Fund Alignment rack');
+
+    await app.fill('#fund-amount', '200');
+    await app.click('.sheet .btn-primary');
+    await expect(app.locator('.sheet')).toHaveCount(0);
+
+    await expect(app.locator('.tile', { hasText: 'Alignment rack' })).toContainText('$3,000');
+    await expect(app.locator('.safe-figure')).toHaveText('$1,320');
+  });
+
+  test('the card goes away once the obligation is funded', async ({ app }) => {
+    // Otherwise it is an alarm that cannot be silenced, which is how an
+    // operator learns to ignore the one card that matters.
+    await app
+      .locator('.needs')
+      .getByRole('button', { name: /Set aside/ })
+      .click();
+    await app.fill('#fund-amount', '1520');
+    await app.click('.sheet .btn-primary');
+    await expect(app.locator('.sheet')).toHaveCount(0);
+
+    // $2,800 + $1,520 = $4,320 of $7,500 — still not full, so still raised.
+    await expect(app.locator('.needs')).toContainText('Alignment rack');
+    await expect(app.locator('.needs')).toContainText('58% of $7,500 set aside so far.');
+  });
+
+  test('the pill agrees with the card, and never says all-clear over it', async ({ app }) => {
+    // The pill is visible from every screen. "Nothing needs you" above a card
+    // saying otherwise teaches the operator the pill is decoration.
+    await expect(app.locator('.nowbar')).toContainText('2 need you');
+
+    // Clear the queue, and the pill must fall through to the obligation
+    // rather than to all-clear.
+    await app.click('.nowbar .nb[data-key="needs"]');
+    for (const name of ['Income landed', 'Waterfall']) {
+      await app
+        .locator('.proposal', { hasText: name })
+        .getByRole('button', { name: /^Dismiss/ })
+        .click();
+    }
+    await expect(app.locator('.proposal')).toHaveCount(0);
+
+    await expect(app.locator('.nowbar')).not.toContainText('Nothing needs you');
+    await expect(app.locator('.nowbar')).toContainText('Something is due');
+  });
+});
