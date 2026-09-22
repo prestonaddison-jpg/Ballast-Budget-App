@@ -23,9 +23,11 @@ import { error, json } from '../http/responses';
 import {
   approveProposal,
   dismissProposal,
+  editProposal,
   listPendingProposals,
   type ProposalRow,
 } from '../money/proposals';
+import { MoneyError } from '../money/types';
 import { audit } from '../db/repos/audit';
 
 export const proposalRoutes = new Hono<{ Bindings: Env; Variables: AppVariables }>();
@@ -176,4 +178,74 @@ proposalRoutes.post('/:entityId/proposals/:proposalId/dismiss', async (c) => {
     now,
   });
   return json({ dismissed: true }, ctx);
+});
+
+interface EditBody {
+  amountMinor?: unknown;
+}
+
+/**
+ * Change a pending proposal's amount (§4: proposals are editable).
+ *
+ * DELIBERATELY NOT BALANCE-CHECKED. A proposal reserves nothing, so staging an
+ * amount larger than the current balance is legitimate — the operator may be
+ * expecting a deposit. The only check that decides anything is the one folded
+ * into approve, and adding a second, weaker copy of it here would give the two
+ * a chance to disagree.
+ */
+proposalRoutes.patch('/:entityId/proposals/:proposalId', async (c) => {
+  const ctx = { secure: !isLocalDev(c.env) };
+  const session = c.get('session');
+  const entityId = c.req.param('entityId');
+  const proposalId = c.req.param('proposalId');
+  const now = Math.floor(Date.now() / 1000);
+
+  if (!(await ownsEntity(c.env.DB, session.userId, entityId))) {
+    return error(404, 'not_found', 'Not found.', ctx);
+  }
+
+  let body: EditBody;
+  try {
+    body = await c.req.json<EditBody>();
+  } catch {
+    return error(400, 'bad_request', 'Expected JSON.', ctx);
+  }
+
+  const amountMinor = body.amountMinor;
+  if (!Number.isInteger(amountMinor) || (amountMinor as number) <= 0) {
+    return error(400, 'bad_request', 'Amount must be a positive whole number of cents.', ctx);
+  }
+
+  try {
+    const result = await editProposal(c.env.DB, {
+      userId: session.userId,
+      proposalId,
+      amountMinor: amountMinor as number,
+      now,
+    });
+
+    if (result.ok) {
+      await audit(c.env.DB, {
+        userId: session.userId,
+        action: 'proposal.edit',
+        subjectType: 'proposal',
+        subjectId: proposalId,
+        detail: { entityId, amountMinor: result.amountMinor },
+        now,
+      });
+      return json({ amountMinor: result.amountMinor }, ctx);
+    }
+
+    switch (result.reason) {
+      case 'not_found':
+        return error(404, 'not_found', 'Not found.', ctx);
+      case 'expired':
+        return error(409, 'expired', 'That suggestion is out of date. Sync and try again.', ctx);
+      default:
+        return error(409, 'not_pending', 'That was already decided.', ctx);
+    }
+  } catch (err) {
+    if (err instanceof MoneyError) return error(400, err.code, err.message, ctx);
+    throw err;
+  }
 });

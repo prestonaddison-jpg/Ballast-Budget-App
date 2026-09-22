@@ -207,3 +207,129 @@ test('Approve is distinguishable from the card it sits on (WCAG 1.4.11)', async 
   );
   expect(Math.max(fill, edge)).toBeGreaterThanOrEqual(3);
 });
+
+test.describe('changing the amount before deciding', () => {
+  test('turns a proposal that no longer fits into one that does', async ({ app }) => {
+    // The dead end this feature exists to remove: $2,400 against $1,520 free,
+    // where declining something the operator wants was previously the only
+    // move available to them.
+    const card = app.locator('.proposal', { hasText: 'Waterfall' });
+    await card.getByRole('button', { name: /^Change the amount/ }).click();
+    await expect(app.locator('.sheet')).toBeVisible();
+
+    // The field opens on the current amount, not empty — the common edit is a
+    // different number, not a number typed from scratch.
+    await expect(app.locator('#edit-amount')).toHaveValue('2400.00');
+
+    await app.getByRole('button', { name: /^All that fits/ }).click();
+    await app.getByRole('button', { name: 'Save amount' }).click();
+
+    await expect(app.locator('.sheet')).toHaveCount(0);
+    await expect(card).toContainText('$1,520');
+    await expect(card).toHaveAttribute('data-affordability', 'fits');
+    await expect(card.getByRole('button', { name: /^Approve/ })).toBeVisible();
+  });
+
+  test('saving an amount moves no money', async ({ app }) => {
+    await app
+      .locator('.proposal', { hasText: 'Income landed' })
+      .getByRole('button', { name: /^Change the amount/ })
+      .click();
+    await app.fill('#edit-amount', '75');
+    await app.getByRole('button', { name: 'Save amount' }).click();
+    await expect(app.locator('.sheet')).toHaveCount(0);
+
+    await app.click('.nowbar .nb[data-key="canvas"]');
+    // Untouched: a proposal is a suggestion right up to the moment it is
+    // approved, and this screen says so out loud.
+    await expect(app.locator('.safe-figure')).toHaveText('$1,520');
+    await expect(app.locator('.tile', { hasText: 'Tax' })).toContainText('$6,200');
+  });
+
+  test('accepts an amount larger than the balance, and approve still refuses it', async ({
+    app,
+  }) => {
+    // Deliberate: a proposal reserves nothing, and an operator expecting a
+    // deposit tomorrow is entitled to stage against it. The refusal belongs to
+    // approve, which checks the live balance, not to the edit.
+    const card = app.locator('.proposal', { hasText: 'Income landed' });
+    await card.getByRole('button', { name: /^Change the amount/ }).click();
+    await app.fill('#edit-amount', '9000');
+    await app.getByRole('button', { name: 'Save amount' }).click();
+
+    await expect(card).toContainText('$9,000');
+    await expect(card).toHaveAttribute('data-affordability', 'short');
+    await expect(card.getByRole('button', { name: /^Approve/ })).toHaveCount(0);
+  });
+
+  test('an amount with more precision than money has is refused, not rounded', async ({ app }) => {
+    await app
+      .locator('.proposal', { hasText: 'Income landed' })
+      .getByRole('button', { name: /^Change the amount/ })
+      .click();
+    await app.fill('#edit-amount', '10.005');
+    await expect(app.getByRole('button', { name: 'Save amount' })).toBeDisabled();
+  });
+
+  test('the sheet traps focus and Escape closes it', async ({ app }) => {
+    await app
+      .locator('.proposal', { hasText: 'Income landed' })
+      .getByRole('button', { name: /^Change the amount/ })
+      .click();
+
+    const inSheet = () =>
+      app.evaluate(() => document.querySelector('.sheet')!.contains(document.activeElement));
+    for (let i = 0; i < 12; i++) await app.keyboard.press('Tab');
+    expect(await inSheet(), 'Tab escaped the dialog').toBe(true);
+
+    await app.keyboard.press('Escape');
+    await expect(app.locator('.sheet')).toHaveCount(0);
+  });
+});
+
+test.describe('controls look like controls', () => {
+  test('every quick-amount chip has a visible boundary (WCAG 1.4.11)', async ({ app }) => {
+    // `--ctrlln` was referenced by the chips and the money input and DEFINED
+    // NOWHERE. An undefined custom property invalidates the whole `border`
+    // shorthand, so it computed to `none` and four tappable controls rendered
+    // as floating text — in every build, in both themes, while the contrast
+    // test passed because it only ever looked at .btn-primary.
+    await app
+      .locator('.proposal', { hasText: 'Waterfall' })
+      .getByRole('button', { name: /^Change the amount/ })
+      .click();
+    await expect(app.locator('.sheet')).toBeVisible();
+
+    const edgeless = await app.evaluate(() =>
+      [...document.querySelectorAll('.sheet .chip, .sheet .sheet-input')]
+        .map((el) => {
+          const s = getComputedStyle(el);
+          return {
+            label: (el.textContent || (el as HTMLInputElement).id || '?').trim().slice(0, 24),
+            style: s.borderTopStyle,
+            width: parseFloat(s.borderTopWidth),
+            colour: s.borderTopColor,
+          };
+        })
+        .filter((b) => b.style === 'none' || !(b.width > 0) || b.colour === 'rgba(0, 0, 0, 0)'),
+    );
+    expect(edgeless, 'controls with no visible edge').toEqual([]);
+  });
+
+  test('the chip boundary actually meets 3:1 against the sheet', async ({ app }) => {
+    // A border that exists but is invisible is the same defect with extra
+    // steps, so the ratio is asserted rather than the declaration.
+    await app
+      .locator('.proposal', { hasText: 'Waterfall' })
+      .getByRole('button', { name: /^Change the amount/ })
+      .click();
+    const ratio = await contrast(
+      app,
+      '.sheet .chip',
+      'borderTopColor',
+      '.sheet',
+      'backgroundColor',
+    );
+    expect(ratio).toBeGreaterThanOrEqual(3);
+  });
+});

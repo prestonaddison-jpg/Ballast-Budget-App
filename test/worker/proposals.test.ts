@@ -25,6 +25,7 @@ import {
   approveProposal,
   createProposal,
   dismissProposal,
+  editProposal,
   expireProposals,
   findProposal,
   listPendingProposals,
@@ -423,6 +424,92 @@ describe('every proposal kind commits a legal ledger entry', () => {
     }
 
     expect(await balanceOf(f.taxId)).toBe(10_00 * PROPOSAL_KINDS.length);
+  });
+});
+
+describe('editing a pending proposal', () => {
+  let f: Fixture;
+  beforeEach(async () => {
+    f = await fixture();
+  });
+
+  const edit = (proposalId: string, amountMinor: number, now = NOW) =>
+    editProposal(env.DB, { userId: f.userId, proposalId, amountMinor, now });
+
+  it('changes the amount and moves nothing', async () => {
+    const { id } = await stage(f, 900_00);
+    expect(await edit(id, 400_00)).toEqual({ ok: true, amountMinor: 400_00 });
+
+    expect((await findProposal(env.DB, f.userId, id))?.amount_minor).toBe(400_00);
+    expect(await balanceOf(f.unallocatedId)).toBe(CASH);
+    expect(await entriesFor(id)).toHaveLength(0);
+  });
+
+  it('is what makes an unaffordable proposal recoverable', async () => {
+    // The point of the whole feature: $900 staged, cash falls to $150, and the
+    // operator can take the part that fits instead of losing the intent.
+    const { id } = await stage(f, 900_00);
+    await fund(f, f.vanId, 850_00);
+    expect((await approve(f, id)).ok).toBe(false);
+
+    expect((await edit(id, 150_00)).ok).toBe(true);
+    expect((await approve(f, id)).ok).toBe(true);
+    expect(await balanceOf(f.taxId)).toBe(150_00);
+    expect(await balanceOf(f.unallocatedId)).toBe(0);
+  });
+
+  it('ALLOWS an amount above the current balance', async () => {
+    // Not an oversight. A proposal reserves nothing, and an operator expecting
+    // a deposit tomorrow is entitled to stage against it. The only check that
+    // decides anything is the one inside approve — which still refuses.
+    const { id } = await stage(f, 100_00);
+    expect(await edit(id, CASH * 10)).toEqual({ ok: true, amountMinor: CASH * 10 });
+    expect(await approve(f, id)).toEqual({ ok: false, reason: 'insufficient_funds' });
+    expect(await balanceOf(f.unallocatedId)).toBe(CASH);
+  });
+
+  it('refuses an amount that is not positive whole cents', async () => {
+    const { id } = await stage(f, 100_00);
+    await expect(edit(id, 0)).rejects.toBeInstanceOf(MoneyError);
+    await expect(edit(id, -1)).rejects.toBeInstanceOf(MoneyError);
+    await expect(edit(id, 10.5)).rejects.toBeInstanceOf(MoneyError);
+    expect((await findProposal(env.DB, f.userId, id))?.amount_minor).toBe(100_00);
+  });
+
+  it('CANNOT rewrite what the ledger already committed', async () => {
+    const { id } = await stage(f, 200_00);
+    expect((await approve(f, id)).ok).toBe(true);
+
+    expect(await edit(id, 999_00)).toEqual({ ok: false, reason: 'not_pending' });
+    // The entry stands at what was actually approved.
+    expect(await balanceOf(f.taxId)).toBe(200_00);
+    expect((await entriesFor(id))[0].amount_minor).toBe(200_00);
+  });
+
+  it('refuses an elapsed proposal', async () => {
+    const { id } = await stage(f, 100_00, { expiresAt: NOW + 60 });
+    expect(await edit(id, 50_00, NOW + 61)).toEqual({ ok: false, reason: 'expired' });
+  });
+
+  it('refuses a dismissed proposal', async () => {
+    const { id } = await stage(f, 100_00);
+    await dismissProposal(env.DB, { userId: f.userId, proposalId: id, now: NOW });
+    expect(await edit(id, 50_00)).toEqual({ ok: false, reason: 'not_pending' });
+  });
+
+  it('refuses ANOTHER user’s proposal', async () => {
+    const other = await fixture();
+    const { id } = await stage(other, 100_00);
+    expect(await edit(id, 50_00)).toEqual({ ok: false, reason: 'not_found' });
+    expect((await findProposal(env.DB, other.userId, id))?.amount_minor).toBe(100_00);
+  });
+
+  it('treats re-saving the SAME amount as a success, not a refusal', async () => {
+    // The UPDATE changes no rows, which is indistinguishable from a refusal at
+    // the driver level. Reporting it as a failure would show an error for an
+    // operator who simply confirmed the number already there.
+    const { id } = await stage(f, 100_00);
+    expect(await edit(id, 100_00)).toEqual({ ok: true, amountMinor: 100_00 });
   });
 });
 

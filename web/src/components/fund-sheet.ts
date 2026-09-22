@@ -21,6 +21,7 @@
 import { formatMoney, formatMoneyExact, type EnvelopeTileModel } from '../lib/envelope-math';
 import { PARSE_MESSAGE, parseMoneyToMinor } from '../lib/money-input';
 import { suggestAmounts } from '../lib/fund-suggest';
+import { trapFocus } from '../lib/dialog-trap';
 
 export { suggestAmounts };
 
@@ -200,40 +201,7 @@ export function createFundSheet(opts: FundSheetOptions): HTMLElement {
   }
   backdrop.append(sheet);
 
-  // Dismiss on backdrop tap, but never on a tap inside the sheet.
-  backdrop.addEventListener('click', (e) => {
-    if (e.target === backdrop) opts.onDismiss();
-  });
-  backdrop.addEventListener('keydown', (e) => {
-    const ev = e as KeyboardEvent;
-    if (ev.key === 'Escape') {
-      opts.onDismiss();
-      return;
-    }
-    if (ev.key !== 'Tab') return;
-
-    // aria-modal="true" tells assistive technology the rest of the page is
-    // unavailable. Without containment that is simply false: Tab walks out of
-    // the dialog and into a Canvas the screen reader has been told is not
-    // there. Recomputed per keypress because the chips and the complete button
-    // come and go.
-    const focusable = [
-      ...sheet.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)'),
-    ].filter((el) => el.offsetParent !== null);
-    if (focusable.length === 0) return;
-
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const active = document.activeElement;
-
-    if (ev.shiftKey && (active === first || !sheet.contains(active))) {
-      ev.preventDefault();
-      last.focus();
-    } else if (!ev.shiftKey && active === last) {
-      ev.preventDefault();
-      first.focus();
-    }
-  });
+  trapFocus({ backdrop, sheet, onDismiss: opts.onDismiss });
 
   queueMicrotask(() => input.focus());
   return backdrop;

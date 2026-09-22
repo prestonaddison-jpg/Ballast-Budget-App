@@ -97,6 +97,18 @@ async function signIn(page) {
     await page.waitForTimeout(400);
     await shot(page, name);
   }
+
+  // The edit sheet, opened from the proposal that no longer fits — the case it
+  // exists for.
+  await page.click('.nowbar .nb[data-key="needs"]');
+  await page.waitForSelector('.proposal', { timeout: 10_000 });
+  await page
+    .locator('.proposal', { hasText: 'Waterfall' })
+    .getByRole('button', { name: /^Change the amount/ })
+    .click();
+  await page.waitForSelector('.sheet', { timeout: 10_000 });
+  await page.waitForTimeout(400);
+  await shot(page, '11-edit-proposal');
   await ctx.close();
 }
 

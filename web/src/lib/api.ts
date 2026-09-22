@@ -200,6 +200,16 @@ export const proposalApi = {
       { method: 'POST' },
     ),
 
+  /**
+   * Change the amount before approving. Moves no money — the proposal is still
+   * a suggestion afterwards, just a different one.
+   */
+  edit: (entityId: string, proposalId: string, amountMinor: number) =>
+    request<{ amountMinor: number }>(
+      `/api/entities/${encodeURIComponent(entityId)}/proposals/${encodeURIComponent(proposalId)}`,
+      { method: 'PATCH', body: JSON.stringify({ amountMinor }) },
+    ),
+
   dismiss: (entityId: string, proposalId: string) =>
     request<{ dismissed: boolean }>(
       `/api/entities/${encodeURIComponent(entityId)}/proposals/${encodeURIComponent(proposalId)}/dismiss`,

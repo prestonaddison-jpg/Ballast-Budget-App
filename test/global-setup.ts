@@ -1,6 +1,6 @@
 import { readD1Migrations } from '@cloudflare/vitest-pool-workers';
 import { execFileSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { TestProject } from 'vitest/node';
@@ -36,14 +36,34 @@ function ensureShellBuilt() {
  * doc comment in the bundled types still points at
  * `@cloudflare/vitest-pool-workers/config`, a subpath that no longer exists.
  */
+/**
+ * The stylesheet SOURCES, read in Node and handed to the worker tests.
+ *
+ * Not `import styles from '...css?raw'` — Vite's CSS plugin intercepts that
+ * and hands back an EMPTY STRING, so a test asserting over it passes while
+ * examining nothing. That is a test which cannot fail for the reason it
+ * exists, which is worse than no test. Read from disk, where the bytes are.
+ */
+function readStylesheets(): Record<string, string> {
+  const dir = resolve(here, '../web/src/styles');
+  return Object.fromEntries(
+    readdirSync(dir)
+      .filter((f) => f.endsWith('.css'))
+      .map((f) => [f, readFileSync(resolve(dir, f), 'utf8')]),
+  );
+}
+
 export default async function setup(project: TestProject) {
   ensureShellBuilt();
   const migrations = await readD1Migrations(resolve(here, '../migrations'));
   project.provide('migrations', migrations);
+  project.provide('stylesheets', readStylesheets());
 }
 
 declare module 'vitest' {
   interface ProvidedContext {
     migrations: Awaited<ReturnType<typeof readD1Migrations>>;
+    /** Every file under web/src/styles, by filename. */
+    stylesheets: Record<string, string>;
   }
 }

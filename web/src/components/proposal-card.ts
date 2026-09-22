@@ -17,6 +17,7 @@ import type { ApiProposal } from '../lib/api';
 export interface ProposalCardHandlers {
   onApprove: (proposal: ApiProposal) => void;
   onDismiss: (proposal: ApiProposal) => void;
+  onEdit: (proposal: ApiProposal) => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(
@@ -60,6 +61,15 @@ export function createProposalCard(
 
   const actions = el('div', 'proposal-actions');
 
+  // FIRST when the proposal no longer fits, because it is then the only move
+  // that keeps the operator's intent — the alternative is declining something
+  // they actually want. Last when it does fit, where approving is the point.
+  const edit = el('button', 'btn-quiet', view.canApprove ? 'Change' : 'Change amount');
+  edit.type = 'button';
+  edit.setAttribute('aria-label', `Change the amount, ${view.amountText}, ${view.routeText}`);
+  edit.addEventListener('click', () => handlers.onEdit(proposal));
+  if (!view.canApprove) actions.append(edit);
+
   if (view.canApprove) {
     const approve = el('button', 'btn-primary', 'Approve');
     approve.type = 'button';
@@ -67,6 +77,8 @@ export function createProposalCard(
     approve.addEventListener('click', () => handlers.onApprove(proposal));
     actions.append(approve);
   }
+
+  if (view.canApprove) actions.append(edit);
 
   const dismiss = el('button', 'btn-quiet', 'Not now');
   dismiss.type = 'button';

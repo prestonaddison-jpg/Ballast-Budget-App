@@ -93,3 +93,60 @@ export function queuePillText(pendingCount: number): string {
   if (pendingCount === 0) return 'Nothing needs you';
   return pendingCount === 1 ? '1 needs you' : `${pendingCount} need you`;
 }
+
+/** Round amounts worth offering, smallest first. Mirrors ./fund-suggest. */
+const ROUND_AMOUNTS = [50_00, 100_00, 250_00, 500_00, 1000_00, 2500_00, 5000_00];
+
+/** Three is the most that fits one row once a chip carries a word, not a figure. */
+const MAX_EDIT_CHIPS = 3;
+
+export interface EditSuggestion {
+  amountMinor: number;
+  /** What the chip SAYS. "All that fits" reads as an intent; "$1,520" doesn't. */
+  label: string;
+}
+
+/**
+ * Quick amounts for the edit sheet. PURE — no DOM.
+ *
+ * The first chip is the reason this sheet exists: a proposal that no longer
+ * fits should be one tap away from the amount that does. So "All that fits" is
+ * chosen first and can never be crowded out by round numbers — the same rule
+ * fund-suggest learned when "all of it" kept falling off the end of a sort.
+ *
+ * Nothing above the source balance is ever offered. The sheet ALLOWS a larger
+ * amount to be typed, because a proposal reserves nothing and the operator may
+ * be staging against a deposit they expect tomorrow — but suggesting one would
+ * be the app proposing something it knows does not currently fit.
+ */
+export function editSuggestions(p: ApiProposal): EditSuggestion[] {
+  const source = p.sourceBalanceMinor;
+  // Unknown balance: every suggestion below would be derived from a number we
+  // do not have. The operator can still type an amount.
+  if (source == null || source <= 0) return [];
+
+  const chosen = new Map<number, string>();
+
+  // 1. The intent chip. Omitted when the proposal already fits, because
+  //    "All that fits" on an amount that already fits is noise.
+  if (source < p.amountMinor) chosen.set(source, 'All that fits');
+
+  // 2. Half, when halving is a meaningfully different, still-whole amount.
+  //    Rounded DOWN to the cent — never up, which would exceed the source.
+  const half = Math.floor(p.amountMinor / 2 / 100) * 100;
+  if (half > 0 && half <= source && half !== p.amountMinor) {
+    chosen.set(half, formatMoney(half));
+  }
+
+  // 3. Round amounts, largest affordable downwards, filling what is left.
+  for (const round of ROUND_AMOUNTS.filter((n) => n <= source).reverse()) {
+    if (chosen.size >= MAX_EDIT_CHIPS) break;
+    if (round === p.amountMinor) continue;
+    if (!chosen.has(round)) chosen.set(round, formatMoney(round));
+  }
+
+  return [...chosen.entries()]
+    .sort(([a], [b]) => a - b)
+    .slice(0, MAX_EDIT_CHIPS)
+    .map(([amountMinor, label]) => ({ amountMinor, label }));
+}

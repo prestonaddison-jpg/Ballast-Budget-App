@@ -14,7 +14,7 @@ import { hashPassword } from '../../src/auth/password';
 import { issueSession } from '../../src/auth/session';
 import { buildSessionCookie } from '../../src/auth/cookies';
 import { createEnvelope, transfer } from '../../src/money/ledger';
-import { createProposal } from '../../src/money/proposals';
+import { createProposal, findProposal } from '../../src/money/proposals';
 import { randomId } from '../../src/crypto/random';
 
 const NOW = 1_800_000_000;
@@ -296,6 +296,116 @@ describe('POST approve', () => {
     const res = await SELF.fetch(`${ORIGIN}/api/entities/${a.entityId}/proposals/${id}/approve`, {
       method: 'POST',
       headers: { Origin: 'http://localhost:8787', 'X-Requested-With': 'ballast' },
+    });
+    expect(res.status).toBe(401);
+  });
+});
+
+describe('PATCH the amount', () => {
+  let a: Actor;
+  beforeEach(async () => {
+    a = await actor();
+  });
+
+  const patch = (actorFor: Actor, entityId: string, proposalId: string, body: unknown) =>
+    call(actorFor, `/api/entities/${entityId}/proposals/${proposalId}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    });
+
+  it('changes the amount and moves nothing', async () => {
+    const { id } = await stage(a, 900_00);
+    const res = await patch(a, a.entityId, id, { amountMinor: 400_00 });
+
+    expect(res.status).toBe(200);
+    expect((await res.json()) as { amountMinor: number }).toEqual({ amountMinor: 400_00 });
+    expect(await balanceOf(a.unallocatedId)).toBe(CASH);
+
+    const body = (await (
+      await call(a, `/api/entities/${a.entityId}/proposals`)
+    ).json()) as QueueBody;
+    expect(body.proposals[0].amountMinor).toBe(400_00);
+    // And it now fits, so the screen will offer Approve.
+    expect(body.proposals[0].affordableNow).toBe(true);
+  });
+
+  it('is the recovery path for a proposal that no longer fits', async () => {
+    const { id } = await stage(a, 900_00);
+    await transfer(env.DB, {
+      userId: a.userId,
+      entityId: a.entityId,
+      fromEnvelopeId: a.unallocatedId,
+      toEnvelopeId: a.vanId,
+      amountMinor: 850_00,
+      kind: 'fund',
+      now: NOW,
+    });
+
+    expect(
+      (await call(a, `/api/entities/${a.entityId}/proposals/${id}/approve`, { method: 'POST' }))
+        .status,
+    ).toBe(409);
+
+    expect((await patch(a, a.entityId, id, { amountMinor: 150_00 })).status).toBe(200);
+    expect(
+      (await call(a, `/api/entities/${a.entityId}/proposals/${id}/approve`, { method: 'POST' }))
+        .status,
+    ).toBe(201);
+    expect(await balanceOf(a.taxId)).toBe(150_00);
+  });
+
+  it('accepts an amount above the balance — a proposal reserves nothing', async () => {
+    const { id } = await stage(a, 100_00);
+    expect((await patch(a, a.entityId, id, { amountMinor: CASH * 10 })).status).toBe(200);
+    // And approve still refuses it, which is the check that matters.
+    expect(
+      (await call(a, `/api/entities/${a.entityId}/proposals/${id}/approve`, { method: 'POST' }))
+        .status,
+    ).toBe(409);
+  });
+
+  it('refuses an amount that is not positive whole cents', async () => {
+    const { id } = await stage(a, 100_00);
+    for (const amountMinor of [0, -1, 10.5, '400', null]) {
+      expect((await patch(a, a.entityId, id, { amountMinor })).status, `${amountMinor}`).toBe(400);
+    }
+    expect(await balanceOf(a.unallocatedId)).toBe(CASH);
+  });
+
+  it('409s once the proposal has been approved', async () => {
+    const { id } = await stage(a, 100_00);
+    await call(a, `/api/entities/${a.entityId}/proposals/${id}/approve`, { method: 'POST' });
+
+    expect((await patch(a, a.entityId, id, { amountMinor: 900_00 })).status).toBe(409);
+    expect(await balanceOf(a.taxId)).toBe(100_00);
+  });
+
+  it('404s on ANOTHER user’s proposal, through either entity', async () => {
+    const other = await actor();
+    const { id } = await stage(other, 100_00);
+
+    expect((await patch(a, other.entityId, id, { amountMinor: 1 })).status).toBe(404);
+    expect((await patch(a, a.entityId, id, { amountMinor: 1 })).status).toBe(404);
+    expect((await findProposal(env.DB, other.userId, id))?.amount_minor).toBe(100_00);
+  });
+
+  it('rejects a cross-site PATCH', async () => {
+    const { id } = await stage(a, 100_00);
+    const res = await SELF.fetch(`${ORIGIN}/api/entities/${a.entityId}/proposals/${id}`, {
+      method: 'PATCH',
+      headers: { Origin: 'https://evil.example', Cookie: a.cookie },
+      body: JSON.stringify({ amountMinor: 1 }),
+    });
+    expect(res.status).toBe(403);
+    expect((await findProposal(env.DB, a.userId, id))?.amount_minor).toBe(100_00);
+  });
+
+  it('requires a session', async () => {
+    const { id } = await stage(a, 100_00);
+    const res = await SELF.fetch(`${ORIGIN}/api/entities/${a.entityId}/proposals/${id}`, {
+      method: 'PATCH',
+      headers: { Origin: 'http://localhost:8787', 'X-Requested-With': 'ballast' },
+      body: JSON.stringify({ amountMinor: 1 }),
     });
     expect(res.status).toBe(401);
   });

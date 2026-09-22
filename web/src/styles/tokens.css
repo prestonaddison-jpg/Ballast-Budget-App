@@ -44,6 +44,12 @@
      translucent; a sheet has live content behind it and must be opaque, or the
      Canvas reads straight through the field the operator is typing money into. */
   --sheet: #ffffff;
+  /* Control boundaries, and a SEPARATE token from --cardln on purpose.
+     WCAG 1.4.11 asks 3:1 of a control's boundary; a card's edge is decoration
+     and can be as faint as it likes. Used by the money input and the quick
+     amount chips — the two places where a boundary is the only thing saying
+     "this is a control and you can tap it". 3.36:1 on #ffffff. */
+  --ctrlln: #8a8d88;
   --display: 'Bricolage Grotesque';
   --body: 'Hanken Grotesk';
   --data: 'Space Mono';
@@ -73,6 +79,10 @@
      at roughly 1:1 against what showed through. */
   --sheet: #1b1e21;
   --cardln: rgba(255, 255, 255, 0.1);
+  /* 3.40:1 on the sheet (#1b1e21) and 3.72:1 on the page background. See the
+     note in Atelier: this is a CONTROL boundary, not a card edge, and the two
+     have different obligations. */
+  --ctrlln: #6e7276;
   --display: 'Bricolage Grotesque';
   --body: 'Hanken Grotesk';
   --data: 'Space Mono';

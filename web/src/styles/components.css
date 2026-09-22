@@ -236,3 +236,11 @@
   flex: 0 0 auto;
   padding: 0 22px;
 }
+
+/* The promise the edit sheet makes, under its actions. A sheet that takes an
+   amount looks like a sheet that spends it; this one changes a suggestion. */
+.sheet-note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  line-height: 1.35;
+}

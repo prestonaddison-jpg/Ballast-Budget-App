@@ -47,9 +47,10 @@ import { createFreshness, computeFreshness } from './components/freshness';
 import { createCollapsible } from './components/collapsible';
 import { createNowBar, type NavKey } from './components/nowbar';
 import { createProposalCard } from './components/proposal-card';
+import { createProposalEditSheet } from './components/proposal-edit-sheet';
 import { queuePillText } from './lib/proposal-copy';
 
-export const VERSION = '3.0.0';
+export const VERSION = '3.1.0';
 
 const app = document.getElementById('app')!;
 
@@ -687,6 +688,40 @@ async function decide(proposal: ApiProposal, action: 'approve' | 'dismiss') {
   }
 }
 
+/**
+ * Change a proposal's amount before deciding on it (§4: proposals are
+ * editable).
+ *
+ * Saving moves NOTHING. It rewrites the suggestion and re-fetches, which is
+ * what makes a $2,400 waterfall against $1,520 recoverable — the card comes
+ * back with an Approve button on it instead of being a dead end whose only
+ * exit is declining something the operator wanted.
+ */
+function openProposalEditSheet(entityId: string, proposal: ApiProposal) {
+  const sheet = createProposalEditSheet({
+    proposal,
+    onDismiss: () => close(),
+    // An ApiError means the Worker replied, and it replied by refusing.
+    isRejection: (err) => err instanceof ApiError,
+    onConfirm: async (amountMinor) => {
+      await proposalApi.edit(entityId, proposal.id, amountMinor);
+      close();
+      await refresh();
+      announce(`Changed to ${formatMoney(amountMinor)}. Nothing has moved.`);
+    },
+  });
+
+  // Focus restore: whatever opened the sheet gets it back, so a keyboard or
+  // switch user is not dumped at the top of the document.
+  const opener = document.activeElement as HTMLElement | null;
+  function close() {
+    sheet.remove();
+    opener?.focus?.();
+  }
+
+  document.body.append(sheet);
+}
+
 function renderNeeds(body: HTMLElement) {
   const s = state!;
 
@@ -745,6 +780,7 @@ function renderNeeds(body: HTMLElement) {
         createProposalCard(proposal, {
           onApprove: (p) => void decide(p, 'approve'),
           onDismiss: (p) => void decide(p, 'dismiss'),
+          onEdit: (p) => openProposalEditSheet(s.entityId!, p),
         }),
       );
     }

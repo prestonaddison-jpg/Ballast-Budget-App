@@ -16,6 +16,7 @@ export type AuditAction =
   | 'envelope.transfer'
   | 'envelope.completed'
   | 'proposal.approve'
+  | 'proposal.edit'
   | 'proposal.dismiss'
   | 'item.linked'
   | 'item.reauth_required'
