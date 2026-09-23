@@ -82,10 +82,17 @@ export function sumEnvelopeBalances(balances: readonly { balanceMinor: Minor }[]
  * 'envelopes_ahead' result means something upstream is broken, not that a
  * routine reconciliation is due.
  *
- * `envelopes_ahead` is the one case an operator will genuinely see, and it is
- * not a bug: it means cash fell below what has already been allocated, so
- * unallocated has gone negative. That is real and must be SHOWN — "you are
- * over-allocated by $300" — rather than smoothed away.
+ * CORRECTION, proved by test. An earlier version of this comment said
+ * `envelopes_ahead` "is the one case an operator will genuinely see". It is
+ * not: it cannot be reached through the normal path at all. When cash falls
+ * below what is allocated, the RESIDUAL absorbs the shortfall by going
+ * negative, envelopes still sum to cash, and the status stays `balanced`.
+ *
+ * So a real over-allocation shows up as a NEGATIVE unallocated balance, not as
+ * this status — which is why the API surfaces `overAllocatedMinor` separately
+ * and the Canvas reads that. Gating the warning on `envelopes_ahead` would
+ * hide every over-allocation there is. Pinned by "but a REAL over-allocation
+ * is still reported in full" in test/worker/unknown-is-not-zero.test.ts.
  */
 export function checkInvariant(
   envelopeBalances: readonly { balanceMinor: Minor }[],

@@ -79,6 +79,32 @@ async function seed(availableMinor: number | null = 600_00): Promise<Fixture> {
   return { userId, entityId, accountId, unallocatedId };
 }
 
+/**
+ * A SECOND budgetable account on an existing fixture, so that "this account is
+ * excluded" can be asserted against a pool that is not empty. Without it the
+ * only observable of an exclusion is an empty set, which since migration 0004
+ * reads as UNKNOWN rather than zero.
+ */
+async function addAccount(f: Fixture, availableMinor: number | null): Promise<string> {
+  const itemId = randomId();
+  const accountId = randomId();
+  await env.DB.prepare(
+    `INSERT INTO source_items (id, user_id, source_item_id, access_token_enc, created_at, updated_at)
+     VALUES (?,?,?,?,?,?)`,
+  )
+    .bind(itemId, f.userId, randomId(), 'v1.x.y', NOW, NOW)
+    .run();
+  await env.DB.prepare(
+    `INSERT INTO source_accounts
+       (id, user_id, item_id, entity_id, source_account_id, name, type, subtype,
+        available_minor, budgetable, created_at, updated_at)
+     VALUES (?,?,?,?,?,'Savings','depository','savings',?,1,?,?)`,
+  )
+    .bind(accountId, f.userId, itemId, f.entityId, randomId(), availableMinor, NOW, NOW)
+    .run();
+  return accountId;
+}
+
 const balanceOf = async (userId: string, envelopeId: string) =>
   (await findEnvelope(env.DB, userId, envelopeId))?.balance_minor ?? null;
 
@@ -114,17 +140,40 @@ describe('the residual: unallocated tracks cash with no ledger writes', () => {
   });
 
   it('EXCLUDES a non-budgetable account from cash', async () => {
+    // Proven against a pool that still EXISTS, so the assertion is about
+    // exclusion and nothing else. An earlier version of this test emptied the
+    // pool entirely and asserted 0 — which quietly encoded "no budgetable
+    // account means zero dollars", the exact lie migration 0004 removes.
+    await addAccount(f, 250_00);
     await env.DB.prepare('UPDATE source_accounts SET budgetable = 0 WHERE id = ?')
       .bind(f.accountId)
       .run();
-    expect(await balanceOf(f.userId, f.unallocatedId)).toBe(0);
+    // $600 excluded, $250 counted. Not $850, and not $0.
+    expect(await balanceOf(f.userId, f.unallocatedId)).toBe(250_00);
   });
 
   it('excludes a closed account', async () => {
+    await addAccount(f, 250_00);
     await env.DB.prepare('UPDATE source_accounts SET closed_at = ? WHERE id = ?')
       .bind(NOW, f.accountId)
       .run();
-    expect(await balanceOf(f.userId, f.unallocatedId)).toBe(0);
+    expect(await balanceOf(f.userId, f.unallocatedId)).toBe(250_00);
+  });
+
+  it('is NULL, not 0, when every account is excluded', async () => {
+    // The empty pool. Nothing is budgetable, so there is no figure to report —
+    // exactly as when no bank has been linked at all. checkInvariant has always
+    // called this 'indeterminate'; before 0004 the view called it $0.
+    await env.DB.prepare('UPDATE source_accounts SET budgetable = 0 WHERE id = ?')
+      .bind(f.accountId)
+      .run();
+    expect(await balanceOf(f.userId, f.unallocatedId)).toBeNull();
+  });
+
+  it('is NULL, not 0, when no account has ever been linked', async () => {
+    // The production state on the day of the first deploy.
+    await env.DB.prepare('DELETE FROM source_accounts WHERE id = ?').bind(f.accountId).run();
+    expect(await balanceOf(f.userId, f.unallocatedId)).toBeNull();
   });
 });
 

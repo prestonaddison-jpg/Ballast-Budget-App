@@ -95,8 +95,20 @@ envelopeRoutes.get('/:entityId/envelopes', async (c) => {
       safeToSpendMinor: unallocatedBalance == null ? null : safeToSpend(check, unallocatedBalance),
       // Surfaced so the Canvas can show "over-allocated by $X" honestly rather
       // than hiding a negative residual behind a floor of zero.
+      //
+      // Gated on the invariant as well as on null, and the redundancy is
+      // deliberate. An over-allocation is a CLAIM that cash is less than what
+      // has been allocated, and that claim cannot be made at all when there is
+      // no cash figure to compare against. Migration 0004 makes the residual
+      // itself null in every indeterminate case, so today this second
+      // condition never fires on its own — it is here so a later change to the
+      // view cannot quietly turn "we don't know" into "over-allocated by
+      // $16,900", which is precisely what the pre-0004 view did the moment an
+      // operator marked their only account non-budgetable.
       overAllocatedMinor:
-        unallocatedBalance != null && unallocatedBalance < 0 ? -unallocatedBalance : 0,
+        check.status !== 'indeterminate' && unallocatedBalance != null && unallocatedBalance < 0
+          ? -unallocatedBalance
+          : 0,
       invariant: check.status,
     },
     ctx,
