@@ -103,6 +103,26 @@ The owner pays per turn. Two things to avoid:
   large review pass was run on this repo and most of its important findings
   were things a single browser screenshot showed. Use the cheap check first.
 
+## Naming is the owner's call
+
+ASK before naming anything the owner will have to live with or type: a Worker,
+a repo, a branch, a custom domain, a database, a queue. Offer a suggestion,
+then wait. Do not pick one and present it as a step.
+
+This is here because of a specific mess. Claude told the owner to create a
+Worker called `ballast` — without asking, and without noticing they had already
+built `ballast-finance-app` for exactly this purpose a few hours earlier. It
+also said "Import a repository" without naming WHICH repository. The result was
+two Workers, two repos and a custom domain with two things pointed at it, and
+the owner reasonably asking why they were being told to rebuild from scratch
+what they had already set up.
+
+None of that was a hard problem. It was three unasked questions.
+
+Related, and the same root cause: when the owner has already set something up,
+find out what it is before routing around it. A resource that looks unrelated
+may be the thing they made for this, named the way they wanted it.
+
 ## Say it when it's broken
 
 Report a defect when you find it, not bundled into the commit that fixes it.
