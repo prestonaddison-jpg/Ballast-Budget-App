@@ -48,7 +48,7 @@ installs to the iOS Home Screen.
 | _(unversioned)_ | **Deployed.** Split `assertEnv` so the app runs without Plaid; login errors now say which thing went wrong. |
 | _(unversioned)_ | **Migration 0004** — an entity with nothing budgetable is UNKNOWN, not $0. Found live. See below.           |
 
-**Counts at `607a7b7`: 398 unit tests, 120 browser tests.**
+**Counts at `0fc2529`: 402 unit tests, 126 browser tests.**
 
 Browser tests here are **Chromium only** — the Playwright CDN is blocked by this
 container's network policy, so WebKit cannot be installed locally. CI is the
@@ -126,6 +126,21 @@ Worth knowing, because the pattern repeats and the next session will hit it too.
 Every one of these shipped, passed every test, and was found by _opening the app
 and looking at it_:
 
+- **The PWA document shipped with no CSP, no frame-ancestors and no HSTS.**
+  `run_worker_first: ["/api/*"]` meant a navigation to `/` was served off the
+  assets binding and the Worker never ran, so `withSecurityHeaders()` was dead
+  code for the only response a browser renders. `/api/health` carried every
+  header; `/` carried none. `test/worker/routing.test.ts` asserts the opposite
+  and passes, because `SELF.fetch()` bypasses the asset router entirely.
+  Fixed with `run_worker_first: true`; pinned by `e2e/security-headers.spec.ts`,
+  which runs the real router.
+- **`npm run dev` answered 403 to every write, including login.** Pointing
+  APP_ORIGIN at the production origins left no localhost origin in the list.
+  The script CLAUDE.md tells you to run to LOOK at the app signs in through
+  that form, so the change disabled this repo's founding practice. Every test
+  suite overrode APP_ORIGIN, so none could see it. Fixed in the dev script;
+  pinned by `test/unit/dev-config.test.ts`, which asserts agreement BETWEEN
+  package.json, wrangler.jsonc and playwright.config.ts.
 - **An entity with nothing budgetable reported `$0`.** Live in production on
   the day of the first deploy: no bank linked, and the app said the operator
   holds nothing. `COALESCE(SUM(...) over nothing, 0)` is a confident zero.
