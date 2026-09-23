@@ -95,7 +95,7 @@
 
   "vars": {
     "PLAID_ENV": "sandbox",
-    "APP_ORIGIN": "https://ballast.addisonfoxhole.workers.dev",
+    "APP_ORIGIN": "https://ballast-finance-app.praeclarusventures.com,https://ballast.addisonfoxhole.workers.dev",
   },
 
   // Secrets (via `wrangler secret put`, never in this file):

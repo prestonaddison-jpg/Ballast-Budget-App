@@ -9,7 +9,7 @@
 
 import type { Context, MiddlewareHandler } from 'hono';
 import type { Env } from '../env';
-import { isLocalDev } from '../env';
+import { allowedOrigins, isLocalDev } from '../env';
 import { readSessionCookie } from '../auth/cookies';
 import { sessionCookieMaxAge, validateSession, type ActiveSession } from '../auth/session';
 import { buildSessionCookie } from '../auth/cookies';
@@ -29,7 +29,7 @@ export const csrfGuard: MiddlewareHandler<{ Bindings: Env; Variables: AppVariabl
   next,
 ) => {
   const ctx = { secure: !isLocalDev(c.env) };
-  const result = checkCsrf(c.req.raw, c.env.APP_ORIGIN);
+  const result = checkCsrf(c.req.raw, allowedOrigins(c.env));
   if (!result.ok) {
     console.warn('csrf_rejected', { reason: result.reason, path: new URL(c.req.url).pathname });
     return error(403, 'forbidden', 'Request blocked.', ctx);

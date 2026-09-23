@@ -31,7 +31,11 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 
 export type CsrfResult = { ok: true } | { ok: false; reason: string };
 
-export function checkCsrf(request: Request, expectedOrigin: string): CsrfResult {
+export function checkCsrf(request: Request, expected: string | readonly string[]): CsrfResult {
+  // One origin or several — a Worker on a custom domain still answers on
+  // workers.dev, and both are legitimately "this site".
+  const expectedOrigins = (typeof expected === 'string' ? [expected] : expected).filter(Boolean);
+
   if (SAFE_METHODS.has(request.method)) return { ok: true };
 
   // 1. Fetch metadata, where the browser provides it.
@@ -43,7 +47,11 @@ export function checkCsrf(request: Request, expectedOrigin: string): CsrfResult 
   // 2. Origin must match exactly when present.
   const origin = request.headers.get('origin');
   if (origin) {
-    if (origin !== expectedOrigin) return { ok: false, reason: 'origin-mismatch' };
+    // Exact match against one of the allowed origins. Never a prefix or
+    // suffix test: "https://evil-ballast.example" ends with nothing useful,
+    // but a sloppy endsWith() would happily accept
+    // "https://ballast.addisonfoxhole.workers.dev.evil.example".
+    if (!expectedOrigins.includes(origin)) return { ok: false, reason: 'origin-mismatch' };
   } else if (!fetchSite) {
     // Neither signal present: a very old browser or a non-browser client.
     // Fall through to the custom-header requirement rather than failing open.

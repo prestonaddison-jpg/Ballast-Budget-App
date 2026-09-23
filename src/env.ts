@@ -29,7 +29,16 @@ export interface Env {
 
   // --- Vars (wrangler.jsonc) ---
   PLAID_ENV: string;
-  /** Canonical origin, used for the CSRF origin check and webhook URLs. */
+  /**
+   * The origins this Worker serves, comma-separated. FIRST is canonical.
+   *
+   * A list rather than one value because a Worker on a custom domain almost
+   * always still answers on workers.dev, and a single value silently 403s
+   * every write on whichever hostname is not it. That also makes moving to a
+   * custom domain a safe, non-atomic operation: add the new origin, attach the
+   * domain, drop the old one — instead of a flip where one of the two is
+   * always broken.
+   */
   APP_ORIGIN: string;
 
   // --- Secrets (wrangler secret put) ---
@@ -95,6 +104,32 @@ export function assertPlaidEnv(env: Env): void {
   }
 }
 
+/**
+ * Every origin this Worker will accept a state-changing request from.
+ *
+ * Trimmed and empties dropped, so trailing commas and stray whitespace in
+ * wrangler.jsonc cannot quietly produce an origin of "" that nothing matches.
+ */
+export function allowedOrigins(env: Env): string[] {
+  return (env.APP_ORIGIN ?? '')
+    .split(',')
+    .map((o) => o.trim())
+    .filter(Boolean);
+}
+
+/** The canonical origin — the first entry. Used where exactly one is needed. */
+export function canonicalOrigin(env: Env): string {
+  return allowedOrigins(env)[0] ?? '';
+}
+
+/**
+ * Local development, which decides whether the session cookie carries Secure.
+ *
+ * Judged on the CANONICAL origin, and deliberately not "any entry is http://":
+ * a production deploy that also listed a local origin by mistake would then
+ * drop Secure from real cookies on the public internet. The safe reading of an
+ * ambiguous list is the strict one.
+ */
 export function isLocalDev(env: Env): boolean {
-  return env.APP_ORIGIN.startsWith('http://');
+  return canonicalOrigin(env).startsWith('http://');
 }

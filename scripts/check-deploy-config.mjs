@@ -82,11 +82,20 @@ function parseJsonc(text) {
 const config = parseJsonc(readFileSync('wrangler.jsonc', 'utf8'));
 
 const appOrigin = config.vars?.APP_ORIGIN ?? '';
+// APP_ORIGIN may list several origins, comma-separated, first one canonical.
+// Check EVERY entry: one http:// buried at the end still reaches production,
+// and checking only the raw string would miss it the moment a second origin
+// is added.
+const origins = appOrigin
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+const insecure = origins.filter((o) => o.startsWith('http://'));
 if (!appOrigin) {
   problems.push('APP_ORIGIN is not set in wrangler.jsonc.');
-} else if (appOrigin.startsWith('http://')) {
+} else if (insecure.length) {
   problems.push(
-    `APP_ORIGIN is "${appOrigin}".\n` +
+    `APP_ORIGIN contains an http:// origin: ${insecure.join(', ')}.\n` +
       '    Over http:// the Worker treats itself as local development: the session\n' +
       '    cookie ships WITHOUT the Secure flag, and the CSRF check accepts only\n' +
       '    that origin, so every write from the real site is refused.\n' +

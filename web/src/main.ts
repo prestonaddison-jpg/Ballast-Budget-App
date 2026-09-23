@@ -46,6 +46,7 @@ import { createFocalAlert } from './components/focal-alert';
 import { createFreshness, computeFreshness } from './components/freshness';
 import { createCollapsible } from './components/collapsible';
 import { createNowBar, type NavKey } from './components/nowbar';
+import { loginErrorText } from './lib/login-errors';
 import { createProposalCard } from './components/proposal-card';
 import { createProposalEditSheet } from './components/proposal-edit-sheet';
 import { trapFocus } from './lib/dialog-trap';
@@ -136,11 +137,7 @@ function renderLogin(onSuccess: () => void) {
       await api.login(email.value, password.value);
       onSuccess();
     } catch (err) {
-      // Never distinguish "no such user" from "wrong password" in the UI.
-      error.textContent =
-        err instanceof ApiError && err.status === 429
-          ? 'Too many attempts. Try again shortly.'
-          : 'That email and password did not match.';
+      error.textContent = loginErrorText(err);
       submit.disabled = false;
       submit.textContent = 'Sign in';
     }
