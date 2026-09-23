@@ -68,6 +68,25 @@ authRoutes.post('/login', async (c) => {
   }
 
   const verification = await verifyPassword(password, user.password_hash);
+
+  // A hash we cannot evaluate is OUR fault, not a typing mistake, and it must
+  // never be reported as one. This is the shape the first production
+  // deployment actually failed in: a hash written off-platform above workerd's
+  // PBKDF2 cap. It threw a 500 then; now it is a named, audited condition.
+  if (verification.unsupported) {
+    console.error('password_hash_unsupported', {
+      userId: user.id,
+      reason: 'stored hash uses parameters this runtime cannot reproduce',
+    });
+    await audit(env.DB, {
+      userId: user.id,
+      action: 'login.failure',
+      detail: { reason: 'hash_unsupported' },
+      now,
+    });
+    return error(503, 'misconfigured', 'Ballast cannot verify logins right now.', ctx);
+  }
+
   if (!verification.valid) {
     await audit(env.DB, {
       userId: user.id,

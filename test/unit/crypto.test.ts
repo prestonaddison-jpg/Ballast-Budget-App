@@ -95,6 +95,13 @@ describe('randomToken', () => {
 
 describe('password hashing', () => {
   // Deliberately low iteration counts: these tests assert behaviour, not cost.
+  //
+  // CAVEAT, added after that reasoning cost a production deployment. It is
+  // sound as far as it goes and it is NOT a licence to leave the shipped
+  // parameters unexercised — substituting 1,000 here meant nothing ever ran
+  // DEFAULT_ITERATIONS inside workerd, which rejects it outright. The shipped
+  // values are covered in test/unit/password-platform-cap.test.ts; keep them
+  // covered there if these stay cheap.
   it('verifies a correct password and rejects a wrong one', async () => {
     const stored = await hashPassword('correct horse battery staple', 1000);
     expect((await verifyPassword('correct horse battery staple', stored)).valid).toBe(true);

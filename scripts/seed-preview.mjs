@@ -14,21 +14,47 @@ import { writeFileSync } from 'node:fs';
 
 const b64url = (buf) => Buffer.from(buf).toString('base64url');
 
-async function hashPassword(password, iterations = 600_000) {
-  const salt = crypto.getRandomValues(new Uint8Array(16));
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(password),
-    { name: 'PBKDF2' },
-    false,
-    ['deriveBits'],
-  );
+/**
+ * MUST MIRROR src/auth/password.ts. This script runs in NODE, where PBKDF2
+ * has no iteration cap — and that difference is exactly how the production
+ * login failure hid. A hash written here at a flat 600,000 iterations is
+ * perfectly valid Node PBKDF2 and is literally unreproducible inside workerd,
+ * which refuses any count above 100,000. The seed looked fine, every browser
+ * test passed (they sign in with a seeded cookie, never the form), and the
+ * only thing that could tell was a real login against a real Worker.
+ *
+ * So the work is chained here the same way it is chained there: rounds of at
+ * most 100,000, each keyed on the previous round's output. `pbkdf2c` is the
+ * tag for a total above one round. `test/unit/crypto.test.ts` asserts the two
+ * implementations agree.
+ */
+const MAX_ITERATIONS_PER_ROUND = 100_000;
+
+async function deriveRound(material, salt, iterations) {
+  const keyMaterial = await crypto.subtle.importKey('raw', material, { name: 'PBKDF2' }, false, [
+    'deriveBits',
+  ]);
   const bits = await crypto.subtle.deriveBits(
     { name: 'PBKDF2', salt, iterations, hash: 'SHA-256' },
     keyMaterial,
     256,
   );
-  return `pbkdf2$sha256$${iterations}$${b64url(salt)}$${b64url(new Uint8Array(bits))}`;
+  return new Uint8Array(bits);
+}
+
+async function hashPassword(password, iterations = 600_000) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  let material = new TextEncoder().encode(password);
+  let out = null;
+  let remaining = iterations;
+  while (remaining > 0) {
+    const thisRound = Math.min(remaining, MAX_ITERATIONS_PER_ROUND);
+    out = await deriveRound(material, salt, thisRound);
+    material = out;
+    remaining -= thisRound;
+  }
+  const algo = iterations <= MAX_ITERATIONS_PER_ROUND ? 'pbkdf2' : 'pbkdf2c';
+  return `${algo}$sha256$${iterations}$${b64url(salt)}$${b64url(out)}`;
 }
 
 // DETERMINISTIC ids. The e2e suite re-seeds before every test, and random ids
