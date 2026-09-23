@@ -21,7 +21,7 @@
 
 import { Hono } from 'hono';
 import type { Env, SyncJob } from '../env';
-import { isLocalDev } from '../env';
+import { isLocalDev, assertPlaidEnv } from '../env';
 import { json, error } from '../http/responses';
 import { PlaidClient, type PlaidEnvironment } from '../ledger-source/plaid/client';
 import { PlaidLedgerSource } from '../ledger-source/plaid/source';
@@ -51,6 +51,19 @@ webhookRoutes.post('/plaid', async (c) => {
     return error(429, 'rate_limited', 'Too many requests.', ctx, {
       'Retry-After': String(limit.retryAfterSeconds),
     });
+  }
+
+  // Plaid configuration is asserted HERE rather than at the front door.
+  // Gating every /api/ request on it made the first real deployment answer 503
+  // to everything — including the login form — because no Plaid account
+  // existed yet. This route genuinely cannot work without it; the Canvas can.
+  try {
+    assertPlaidEnv(env);
+  } catch (err) {
+    console.error('plaid_configuration_error', {
+      message: err instanceof Error ? err.message : String(err),
+    });
+    return error(503, 'misconfigured', 'Bank sync is not configured.', ctx);
   }
 
   // 1. Raw bytes, read exactly once.

@@ -47,23 +47,51 @@ export interface SyncJob {
 }
 
 /**
- * Fail fast and loudly when configuration is missing.
+ * Fail fast on configuration the app CANNOT SERVE A REQUEST WITHOUT.
  *
- * A Worker with no FIELD_ENCRYPTION_KEY would otherwise run happily until the
- * first bank connection, then fail somewhere much less obvious.
+ * That is a much shorter list than it used to be, and the difference matters.
+ * This once demanded PLAID_CLIENT_ID, PLAID_SECRET and FIELD_ENCRYPTION_KEY on
+ * every single /api/ request — so the first real deployment answered 503 to
+ * everything, including the login form, purely because no Plaid account
+ * existed yet. The shell loaded and nothing in it worked.
+ *
+ * Ballast is explicitly designed to run before any bank is connected: you can
+ * sign in, create envelopes, move money between them and approve proposals
+ * with no Plaid whatsoever. Demanding Plaid credentials to serve those paths
+ * contradicted the product's own premise.
+ *
+ * So the rule is now: assert what THIS request needs, where it needs it. Plaid
+ * configuration is asserted by the Plaid paths (see assertPlaidEnv) rather
+ * than by the front door.
  */
 export function assertEnv(env: Env): void {
+  // APP_ORIGIN decides whether the session cookie carries Secure and which
+  // origin the CSRF check accepts. Every authenticated request depends on it,
+  // so its absence is genuinely unservable.
+  if (!env.APP_ORIGIN) {
+    throw new Error('Missing required configuration: APP_ORIGIN');
+  }
+}
+
+/**
+ * Configuration the PLAID paths cannot work without.
+ *
+ * Called where Plaid is actually reached — webhook verification, link, sync —
+ * so an unconfigured deploy fails loudly on those routes and stays perfectly
+ * usable everywhere else.
+ *
+ * FIELD_ENCRYPTION_KEY belongs here rather than at the front door because its
+ * only job is encrypting stored access tokens. With no linked institution
+ * there is nothing to encrypt, and refusing to serve the Canvas over a key
+ * that has nothing to protect yet is theatre, not safety.
+ */
+export function assertPlaidEnv(env: Env): void {
   const missing: string[] = [];
-  for (const key of [
-    'PLAID_CLIENT_ID',
-    'PLAID_SECRET',
-    'FIELD_ENCRYPTION_KEY',
-    'APP_ORIGIN',
-  ] as const) {
+  for (const key of ['PLAID_CLIENT_ID', 'PLAID_SECRET', 'FIELD_ENCRYPTION_KEY'] as const) {
     if (!env[key]) missing.push(key);
   }
   if (missing.length) {
-    throw new Error(`Missing required configuration: ${missing.join(', ')}`);
+    throw new Error(`Missing required Plaid configuration: ${missing.join(', ')}`);
   }
 }
 
