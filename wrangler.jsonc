@@ -40,8 +40,31 @@
     "not_found_handling": "single-page-application",
     // Assets are served BEFORE the Worker by default, so without this any
     // /api/* path colliding with a built file would be served as a static
-    // file and the API would never run. Patterns MUST start with "/".
-    "run_worker_first": ["/api/*"],
+    // file and the API would never run.
+    //
+    // THIS WAS `["/api/*"]` AND IT SHIPPED THE DOCUMENT WITH NO CSP.
+    //
+    // Cloudflare's docs on the array form: "This approach disables the
+    // automatic `Sec-Fetch-Mode: navigate` detection and gives you explicit
+    // control over which requests should be handled by your Worker script vs
+    // served as static assets." So a navigation to `/` matched no pattern,
+    // was served straight off the assets binding, and src/index.ts never ran
+    // — which meant withSecurityHeaders() never ran either. Reproduced
+    // against a real `wrangler dev`: `GET /` carried Content-Type,
+    // Cache-Control and ETag and NOTHING else, while `GET /api/health` on the
+    // same server carried the full header set. The one response a browser
+    // actually renders was the one without a Content-Security-Policy, without
+    // frame-ancestors 'none', and without HSTS.
+    //
+    // `true` invokes the Worker unconditionally; src/index.ts then fetches
+    // the asset through env.ASSETS itself and wraps it, so not_found_handling
+    // still applies and the headers finally reach the document. Cloudflare
+    // names this as required "if you are ... performing any authentication
+    // checks or logging requests before serving static assets".
+    //
+    // Cost note: every asset request now invokes the Worker and is billed as
+    // a request. That is the price of the document having a CSP.
+    "run_worker_first": true,
   },
 
   "d1_databases": [

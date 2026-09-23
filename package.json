@@ -8,7 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var APP_ORIGIN:http://localhost:8787",
     "dev:web": "vite dev --config web/vite.config.ts",
     "build": "npm run build:web",
     "build:web": "vite build --config web/vite.config.ts",

@@ -69,7 +69,16 @@ function readStylesheets(): Record<string, string> {
  * that cannot be imported into workerd at all.
  */
 function readSources(): Record<string, string> {
-  const wanted = ['web/src/lib/api.ts', 'scripts/build-artifact.mjs'];
+  const wanted = [
+    'web/src/lib/api.ts',
+    'scripts/build-artifact.mjs',
+    // The three files that together decide whether local development works.
+    // They are read as TEXT because the defect is a DISAGREEMENT between
+    // them, which no single file can be asked about.
+    'package.json',
+    'wrangler.jsonc',
+    'playwright.config.ts',
+  ];
   return Object.fromEntries(wanted.map((f) => [f, readFileSync(resolve(here, '..', f), 'utf8')]));
 }
 
