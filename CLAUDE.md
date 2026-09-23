@@ -129,6 +129,31 @@ Report a defect when you find it, not bundled into the commit that fixes it.
 The owner should hear "the nav was never on screen" as news, not as a line item
 in a changelog.
 
+## Before you tell the owner to spend money
+
+This rule cost $5 and a good deal of trust, so it is written down.
+
+Production login was failing. PBKDF2 was measured at 281ms against a
+documented 10ms CPU limit on the free plan. That was a real finding — and it
+was reported as _the_ cause. The owner upgraded to Workers Paid. Login still
+failed.
+
+Three separate errors, each avoidable:
+
+1. **"This is a real problem" was collapsed into "this is the problem."** A
+   confirmed blocker on one path says nothing about whether it is the one
+   currently firing. Say which it is.
+2. **An inference was preferred over a log.** Cloudflare prints the actual
+   exception under Workers & Pages → the Worker → **Logs**, and Metrics shows
+   `exceededResources` directly. Both are free and neither had been read.
+   Read the log before reasoning about what the log would say.
+3. **A purchase was recommended before the free diagnostic was run.** Never
+   again. If a fix costs money, the evidence for it must be something
+   observed, not something derived.
+
+Report confidence honestly: "this is a blocker we will hit" and "this is what
+is happening right now" are different sentences.
+
 ## Architecture: the three things that will bite you
 
 1. **D1 has no interactive transactions.** Only a single statement or

@@ -8,7 +8,7 @@ is on GitHub and on any machine that has ever pulled.
 Keep it current. A stale STATE.md is worse than none, because the next session
 will believe it.
 
-_Last updated: production database migrated and first account created; queue bindings parked until Plaid._
+_Last updated: live in production; migration 0004 applied remotely; login still failing and undiagnosed._
 
 ---
 
@@ -45,8 +45,14 @@ installs to the iOS Home Screen.
 | **v4.0.0**      | Obligations — due dates that reach the screen.                                                              |
 | **v4.1.0**      | The focal alert points at the deadline that needs money.                                                    |
 | _(unversioned)_ | Fixed a 21px tap target on "Mark complete"; brought the shareable demo generator back in sync with the app. |
+| _(unversioned)_ | **Deployed.** Split `assertEnv` so the app runs without Plaid; login errors now say which thing went wrong. |
+| _(unversioned)_ | **Migration 0004** — an entity with nothing budgetable is UNKNOWN, not $0. Found live. See below.           |
 
-**Counts at `25e3670`: 361 unit tests, 114 browser tests.**
+**Counts at `607a7b7`: 398 unit tests, 120 browser tests.**
+
+Browser tests here are **Chromium only** — the Playwright CDN is blocked by this
+container's network policy, so WebKit cannot be installed locally. CI is the
+only WebKit signal, and WebKit is the engine that matters.
 
 Run them with `npm run test:all`. The two suites answer different questions —
 `CLAUDE.md` explains why, and why a green unit suite means very little on its
@@ -74,13 +80,13 @@ without it, on the proposals and obligations side, is built.
 
 Verified present in the account. IDs match `wrangler.jsonc`.
 
-| Resource | Name                               | ID / note                                                                                                                                                                  |
-| -------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| D1       | `ballast-db`                       | `e005e79c-2719-40d2-9837-eb0cdb6738c2` — **MIGRATED.** 13 tables + `envelope_balances`; `d1_migrations` records 0001-0003. One user, one entity, one unallocated envelope. |
-| KV       | `ballast-cache`                    | `c8581f3bdedf465d9c79ac957ca8546a`                                                                                                                                         |
-| R2       | `ballast-receipts`                 | exists                                                                                                                                                                     |
-| Queues   | `ballast-sync`, `ballast-sync-dlq` | **Existence unconfirmed, and now PARKED** — the bindings are commented out of `wrangler.jsonc` until Plaid, because a deploy fails on a queue that does not exist.         |
-| Worker   | `ballast`                          | **Does not exist yet.** The account's `ballast-finance-app` is an unrelated Worker.                                                                                        |
+| Resource | Name                               | ID / note                                                                                                                                                                             |
+| -------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1       | `ballast-db`                       | `e005e79c-2719-40d2-9837-eb0cdb6738c2` — **MIGRATED through 0004**, applied remotely by hand through the D1 connector. One user, one entity, one unallocated envelope, zero accounts. |
+| KV       | `ballast-cache`                    | `c8581f3bdedf465d9c79ac957ca8546a`                                                                                                                                                    |
+| R2       | `ballast-receipts`                 | exists                                                                                                                                                                                |
+| Queues   | `ballast-sync`, `ballast-sync-dlq` | **Existence unconfirmed, and now PARKED** — the bindings are commented out of `wrangler.jsonc` until Plaid, because a deploy fails on a queue that does not exist.                    |
+| Worker   | `ballast`                          | **LIVE**, deployed by Workers Builds on every push to this branch. Also at `ballast-finance-app.praeclarusventures.com`.                                                              |
 
 ---
 
@@ -101,7 +107,15 @@ Verified present in the account. IDs match `wrangler.jsonc`.
    exists in production. There is still no sign-up route and no
    password-change screen, so a second user, or a new password, means another
    direct insert until that is built.
-5. **CI does not gate deploys.** GitHub Actions and Cloudflare do not talk to
+5. **LOGIN IS BROKEN IN PRODUCTION AND UNDIAGNOSED.** The seeded user cannot
+   sign in. `rate_limits` has rows, so requests reach the handler;
+   `audit_log` is empty, so it dies before the user lookup. The exact same
+   row replayed locally returns 200 + `login.success`, so the code is right
+   and the failure is environmental. **The next step is Cloudflare dashboard →
+   Workers & Pages → `ballast` → Logs**, which prints the actual exception.
+   Do not guess again: $5 was already spent on a Workers Paid upgrade
+   recommended off an inference rather than off that log.
+6. **CI does not gate deploys.** GitHub Actions and Cloudflare do not talk to
    each other, so a red test suite will not stop a deploy.
 
 ---
@@ -112,6 +126,15 @@ Worth knowing, because the pattern repeats and the next session will hit it too.
 Every one of these shipped, passed every test, and was found by _opening the app
 and looking at it_:
 
+- **An entity with nothing budgetable reported `$0`.** Live in production on
+  the day of the first deploy: no bank linked, and the app said the operator
+  holds nothing. `COALESCE(SUM(...) over nothing, 0)` is a confident zero.
+  Worse, the same empty-pool path made a funded entity read
+  "over-allocated by $16,900" the moment its only account was marked
+  non-budgetable. Fixed by migration 0004; the class is now pinned by
+  `test/worker/unknown-is-not-zero.test.ts`. **Every fixture in the suite
+  seeded an account first**, which is why 361 tests never saw it — the one
+  state a first deploy is guaranteed to be in was the one nothing exercised.
 - The **Now-Bar rendered below the fold in every build** for the life of Phase 0
   and Slice 1. 234 tests passed throughout.
 - **`--ctrlln` was read by two rules and defined nowhere**, so the quick-amount
